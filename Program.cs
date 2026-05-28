@@ -1,5 +1,7 @@
 using Ecommerce_Backend.Areas.Identity.Data;
 using Ecommerce_Backend.Data;
+using Ecommerce_Backend.Models.BusinessLayer;
+using Ecommerce_Backend.Models.DatabaseLayer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
@@ -11,8 +13,11 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options => options.SignIn.R
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
-
+builder.Services.AddScoped<IDatabaseLayer, DataBaseLayer>();
+builder.Services.AddScoped<IBusinessLayer, BusinessLayer>();
 var app = builder.Build();
+
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
