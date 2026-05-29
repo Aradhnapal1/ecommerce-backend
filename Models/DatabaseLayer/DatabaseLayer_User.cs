@@ -8,6 +8,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         Task<bool> UserRegister(UserRegisterRequest model);
         Task<bool> UserVerifyOtp(UserVerifyOtpRequest model);
+
+        Task<UserLoginResponse?> UserLogin(UserLoginRequest model);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -101,6 +103,39 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             updateCmd.Parameters.AddWithValue("@email", model.email ?? "");
             await updateCmd.ExecuteNonQueryAsync();
             return true;
+        }
+
+
+        public async Task<UserLoginResponse?> UserLogin(UserLoginRequest model)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(@"
+        SELECT id, first_name, last_name, email, phone_number, password, role, is_verified
+        FROM user_register
+        WHERE email = @email
+    ", con);
+            cmd.Parameters.AddWithValue("@email", model.email ?? "");
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) return null;
+
+            bool isVerified = reader.GetBoolean(reader.GetOrdinal("is_verified"));
+            if (!isVerified) return null;
+
+            string storedHash = reader.GetString(reader.GetOrdinal("password"));
+            if (!BCrypt.Net.BCrypt.Verify(model.password, storedHash)) return null;
+
+            return new UserLoginResponse
+            {
+                id = reader.GetInt32(reader.GetOrdinal("id")),
+                first_name = reader.GetString(reader.GetOrdinal("first_name")),
+                last_name = reader.GetString(reader.GetOrdinal("last_name")),
+                email = reader.GetString(reader.GetOrdinal("email")),
+                phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
+                role = reader.GetString(reader.GetOrdinal("role"))
+            };
         }
     }
 }

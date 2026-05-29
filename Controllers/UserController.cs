@@ -1,6 +1,7 @@
 ﻿using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Mvc;
+using Ecommerce_Backend.Services;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -9,10 +10,12 @@ namespace Ecommerce_Backend.Controllers
     public class UserController : ControllerBase
     {
         private readonly IBusinessLayer _businessLayer;
+        private readonly IJwtService _jwtService;
 
-        public UserController(IBusinessLayer businessLayer)
+        public UserController(IBusinessLayer businessLayer, IJwtService jwtService)
         {
             _businessLayer = businessLayer;
+            _jwtService = jwtService;
         }
 
         // POST api/user/register
@@ -52,6 +55,34 @@ namespace Ecommerce_Backend.Controllers
                 return BadRequest(new { message = "Invalid or expired OTP" });
 
             return Ok(new { message = "OTP verified. Registration complete!" });
+        }
+
+
+
+
+
+
+        // POST api/user/login
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] UserLoginRequest model)
+        {
+            if (string.IsNullOrWhiteSpace(model.email) ||
+                string.IsNullOrWhiteSpace(model.password))
+                return BadRequest(new { message = "Email and password are required" });
+
+            var user = await _businessLayer.UserLogin(model);
+            if (user == null)
+                return Unauthorized(new { message = "Invalid credentials or account not verified" });
+
+            // ✅ JWT Token generate karo
+            string token = _jwtService.GenerateToken(user);
+            user.token = token;
+
+            return Ok(new
+            {
+                message = "Login successful",
+                token
+            });
         }
     }
 }

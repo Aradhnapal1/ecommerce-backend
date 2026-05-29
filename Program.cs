@@ -3,8 +3,11 @@ using Ecommerce_Backend.Data;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Models.DatabaseLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,9 +27,32 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 //builder.Services.AddSwaggerGen();
 
-// ? Sirf ye 3 lines — baaki kuch nahi
+// ? JWT Authentication
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+                                     Encoding.UTF8.GetBytes(
+                                         builder.Configuration["Jwt:Key"]!))
+    };
+});
+
+// ? Services
 builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IDatabaseLayer, DataBaseLayer>();  // ? DataBaseLayer
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IDatabaseLayer, DataBaseLayer>();
 builder.Services.AddScoped<IBusinessLayer, BusinessLayer>();
 
 var app = builder.Build();
@@ -45,7 +71,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseRouting();
-app.UseAuthorization();
+app.UseAuthentication();  // ? pehle
+app.UseAuthorization();   // ? baad mein
 app.MapStaticAssets();
 
 app.MapControllerRoute(

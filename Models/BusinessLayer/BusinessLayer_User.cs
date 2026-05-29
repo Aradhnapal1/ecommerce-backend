@@ -7,6 +7,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     {
         Task<bool> UserRegister(UserRegisterRequest model);
         Task<bool> UserVerifyOtp(UserVerifyOtpRequest model);
+        Task<UserLoginResponse?> UserLogin(UserLoginRequest model);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -19,6 +20,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<bool> UserVerifyOtp(UserVerifyOtpRequest model)
         {
             return await _databaseLayer.UserVerifyOtp(model);
+        }
+
+        public async Task<UserLoginResponse?> UserLogin(UserLoginRequest model)
+        {
+            return await _databaseLayer.UserLogin(model);
         }
     }
 }
