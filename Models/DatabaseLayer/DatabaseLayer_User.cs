@@ -29,15 +29,33 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            using var checkCmd = new NpgsqlCommand(
-                "SELECT COUNT(*) FROM user_register WHERE email = @email", con);
+            // Check karo — email exists hai aur verified bhi hai?
+            using var checkCmd = new NpgsqlCommand(@"
+        SELECT is_verified FROM user_register 
+        WHERE email = @email
+    ", con);
             checkCmd.Parameters.AddWithValue("@email", model.email ?? "");
-            int count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-            if (count > 0) return false;
+            var result = await checkCmd.ExecuteScalarAsync();
 
+            if (result != null && result != DBNull.Value)
+            {
+                bool isVerified = Convert.ToBoolean(result);
+
+                // ✅ Already verified — email already exists error
+                if (isVerified) return false;
+
+                // ✅ Not verified — purana record delete karo
+                using var deleteCmd = new NpgsqlCommand(
+                    "DELETE FROM user_register WHERE email = @email", con);
+                deleteCmd.Parameters.AddWithValue("@email", model.email ?? "");
+                await deleteCmd.ExecuteNonQueryAsync();
+            }
+
+            // Naya OTP generate karo + password hash karo
             string otp = GenerateOtp();
             string hash = BCrypt.Net.BCrypt.HashPassword(model.password);
 
+            // Fresh insert karo
             using var cmd = new NpgsqlCommand(@"
         INSERT INTO user_register
             (first_name, last_name, email, phone_number, password, role, otp, is_verified)
@@ -49,11 +67,12 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             cmd.Parameters.AddWithValue("@email", model.email ?? "");
             cmd.Parameters.AddWithValue("@phone_number", model.phone_number ?? "");
             cmd.Parameters.AddWithValue("@password", hash);
-            cmd.Parameters.AddWithValue("@role", model.role.ToUpper());  // ✅ ADMIN or USER
+            cmd.Parameters.AddWithValue("@role", model.role.ToUpper());
             cmd.Parameters.AddWithValue("@otp", otp);
             cmd.Parameters.AddWithValue("@is_verified", false);
             await cmd.ExecuteNonQueryAsync();
 
+            // OTP email bhejo
             await _emailService.SendOtp(model.email!, otp);
             return true;
         }
