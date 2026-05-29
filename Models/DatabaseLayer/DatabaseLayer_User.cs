@@ -10,6 +10,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<bool> UserVerifyOtp(UserVerifyOtpRequest model);
 
         Task<UserLoginResponse?> UserLogin(UserLoginRequest model);
+        Task<UserLoginResponse?> GetUserById(int id);
+        Task<List<UserLoginResponse>> GetAllUsers();
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -137,5 +139,78 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 role = reader.GetString(reader.GetOrdinal("role"))
             };
         }
+
+
+
+
+
+        public async Task<UserLoginResponse?> GetUserById(int id)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(@"
+        SELECT id, first_name, last_name, email, phone_number, role, is_verified
+        FROM user_register
+        WHERE id = @id AND is_verified = TRUE
+    ", con);
+            cmd.Parameters.AddWithValue("@id", id);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) return null;
+
+            return new UserLoginResponse
+            {
+                id = reader.GetInt32(reader.GetOrdinal("id")),
+                first_name = reader.GetString(reader.GetOrdinal("first_name")),
+                last_name = reader.GetString(reader.GetOrdinal("last_name")),
+                email = reader.GetString(reader.GetOrdinal("email")),
+                phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
+                role = reader.GetString(reader.GetOrdinal("role"))
+            };
+        }
+
+        // Get All Users
+        public async Task<List<UserLoginResponse>> GetAllUsers()
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(@"
+        SELECT id, first_name, last_name, email, phone_number, role, is_verified
+        FROM user_register
+        WHERE is_verified = TRUE
+        ORDER BY id DESC
+    ", con);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            var users = new List<UserLoginResponse>();
+
+            while (await reader.ReadAsync())
+            {
+                users.Add(new UserLoginResponse
+                {
+                    id = reader.GetInt32(reader.GetOrdinal("id")),
+                    first_name = reader.GetString(reader.GetOrdinal("first_name")),
+                    last_name = reader.GetString(reader.GetOrdinal("last_name")),
+                    email = reader.GetString(reader.GetOrdinal("email")),
+                    phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
+                    role = reader.GetString(reader.GetOrdinal("role"))
+                });
+            }
+
+            return users;
+        }
+
+
+
+
+
+
+
+
+
+
+
     }
 }

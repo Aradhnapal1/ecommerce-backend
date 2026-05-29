@@ -84,5 +84,38 @@ namespace Ecommerce_Backend.Controllers
                 token
             });
         }
+
+
+
+        // GET api/user/get-all
+        [HttpGet("get-all")]
+        public async Task<IActionResult> GetAllUsers()
+        {
+            var users = await _businessLayer.GetAllUsers();
+            if (users == null || users.Count == 0)
+                return NotFound(new { message = "No users found" });
+
+            return Ok(new
+            {
+                message = "Users fetched successfully",
+                total = users.Count,
+                users = users.Select(u => new { u.first_name, u.last_name, u.email, u.phone_number, u.role }).ToList()
+            });
+        }
+
+        // GET api/user/get/{id}
+        [HttpGet("get/{id}")]
+        public async Task<IActionResult> GetUserById(int id)
+        {
+            var user = await _businessLayer.GetUserById(id);
+            if (user == null)
+                return NotFound(new { message = "User not found" });
+
+            return Ok(new
+            {
+                message = "User fetched successfully",
+                user
+            });
+        }
     }
 }

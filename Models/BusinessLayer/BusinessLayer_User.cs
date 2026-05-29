@@ -8,6 +8,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<bool> UserRegister(UserRegisterRequest model);
         Task<bool> UserVerifyOtp(UserVerifyOtpRequest model);
         Task<UserLoginResponse?> UserLogin(UserLoginRequest model);
+        Task<UserLoginResponse?> GetUserById(int id);
+        Task<List<UserLoginResponse>> GetAllUsers();
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -25,6 +27,17 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<UserLoginResponse?> UserLogin(UserLoginRequest model)
         {
             return await _databaseLayer.UserLogin(model);
+        }
+
+
+        public async Task<UserLoginResponse?> GetUserById(int id)
+        { 
+            return await _databaseLayer.GetUserById(id);
+        }
+
+        public async Task<List<UserLoginResponse>> GetAllUsers()
+        {
+            return await _databaseLayer.GetAllUsers();
         }
     }
 }
