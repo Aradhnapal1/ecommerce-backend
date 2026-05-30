@@ -6,6 +6,7 @@ using NuGet.Protocol.Plugins;
 
 namespace Ecommerce_Backend.Controllers
 {
+<<<<<<< HEAD
     [ApiController]
     [Route("api/size")]
     public class SizeController : ControllerBase
@@ -57,5 +58,10 @@ namespace Ecommerce_Backend.Controllers
                 message = "Size deleted successfully"
             });
         }
+=======
+    public class SizeController : ControllerBase
+    {
+        
+>>>>>>> ff09c383c3de79f1b183d9e69a537e8e4fe50fc0
     }
 }

@@ -34,12 +34,25 @@
     }
 
 
+
     public class SizeModel
     {
         public int Id { get; set; }
         public string? SizeName { get; set; }
         public DateTime CreatedAt { get; set; }
         public bool IsActive { get; set; } = true;
+    }
+
+    public class ColorResponse
+    {
+        public int Id { get; set; }
+
+        public string ColorName { get; set; }
+
+        public bool Status { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
     }
 
 }
