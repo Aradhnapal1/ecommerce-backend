@@ -32,6 +32,7 @@ namespace Ecommerce_Backend.Controllers
 
             // Role check
             var allowedRoles = new[] { "ADMIN", "USER" };
+
             if (!allowedRoles.Contains(model.role.ToUpper()))
                 return BadRequest(new { message = "Role must be ADMIN or USER" });
 
