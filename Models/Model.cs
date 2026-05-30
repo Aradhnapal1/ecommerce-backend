@@ -1,4 +1,6 @@
-﻿namespace Ecommerce_Backend.Models
+﻿using Microsoft.AspNetCore.Http;
+namespace Ecommerce_Backend.Models
+
 {
     public class UserRegisterRequest
     {
@@ -55,4 +57,21 @@
 
     }
 
+
+    public class BrandModel
+    {
+        public int Id { get; set; }
+        public string? BrandName { get; set; }
+        public string? BrandImg { get; set; }
+        public bool IsActive { get; set; }
+
+        public IFormFile? BrandFile { get; set; }
+    }
+
+    public class CloudinarySettings
+    {
+        public string CloudName { get; set; } = string.Empty;
+        public string ApiKey { get; set; } = string.Empty;
+        public string ApiSecret { get; set; } = string.Empty;
+    }
 }

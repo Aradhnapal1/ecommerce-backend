@@ -32,3 +32,14 @@ CREATE TABLE colors (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 );
+
+
+
+CREATE TABLE brands
+(
+    id SERIAL PRIMARY KEY,
+    brand_name VARCHAR(200) NOT NULL,
+    brand_img TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

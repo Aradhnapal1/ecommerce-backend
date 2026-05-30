@@ -1,5 +1,6 @@
 using Ecommerce_Backend.Areas.Identity.Data;
 using Ecommerce_Backend.Data;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Models.DatabaseLayer;
 using Ecommerce_Backend.Services;
@@ -48,6 +49,14 @@ builder.Services.AddAuthentication(options =>
                                          builder.Configuration["Jwt:Key"]!))
     };
 });
+
+
+builder.Services.AddControllers();
+
+builder.Services.Configure<CloudinarySettings>(
+    builder.Configuration.GetSection("CloudinarySettings"));
+
+builder.Services.AddScoped<CloudinaryService>();
 
 // ? Services
 builder.Services.AddScoped<IEmailService, EmailService>();
