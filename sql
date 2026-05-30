@@ -11,3 +11,12 @@ CREATE TABLE user_register
     is_verified  BOOLEAN      DEFAULT FALSE,
     created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
+
+
+
+CREATE TABLE sizes (
+    id SERIAL PRIMARY KEY,
+    size_name VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE
+);
