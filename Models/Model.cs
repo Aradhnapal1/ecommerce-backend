@@ -39,9 +39,21 @@
 
         public string ColorName { get; set; }
 
+        public string? ColorCode { get; set; }
+
         public bool Status { get; set; }
 
         public DateTime CreatedAt { get; set; }
+    }
+
+    public class ColorApiResponse
+    {
+        public HexData hex { get; set; }
+    }
+
+    public class HexData
+    {
+        public string value { get; set; }
     }
 
 }

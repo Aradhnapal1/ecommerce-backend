@@ -1,4 +1,5 @@
-﻿using Ecommerce_Backend.Models.BusinessLayer;
+﻿using Ecommerce_Backend.Models;
+using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -20,6 +21,25 @@ namespace Ecommerce_Backend.Controllers
             var colors = await businessLayer.GetAllColors();
 
             return Ok(colors);
+        }
+
+        [HttpPost("create")]
+        public async Task<IActionResult> CreateColor([FromBody] ColorResponse color)
+        {
+            try
+            {
+                var createdColor = await businessLayer.CreateColor(color);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Color added successfully.",
+                    data = createdColor
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
     }
 }
