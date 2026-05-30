@@ -33,4 +33,15 @@
         public string? token { get; set; }
     }
 
+    public class ColorResponse
+    {
+        public int Id { get; set; }
+
+        public string ColorName { get; set; }
+
+        public bool Status { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+    }
+
 }

@@ -2,11 +2,8 @@
 
 namespace Ecommerce_Backend.Controllers
 {
-    public class SizeController : Controller
+    public class SizeController : ControllerBase
     {
-        public IActionResult Index()
-        {
-            return View();
-        }
+        
     }
 }
