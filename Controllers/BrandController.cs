@@ -33,5 +33,14 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.GetAllBrands();
         }
+
+        [HttpPut("updatebrand/{id}")]
+        public async Task<IActionResult> UpdateBrand(int id, [FromForm] BrandModel brand)
+        {
+            return await _businessLayer.UpdateBrand(id, brand);
+
+        }
+
+
     }
 }
