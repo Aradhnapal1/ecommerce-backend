@@ -9,6 +9,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         Task<List<ColorResponse>> GetAllColors();
         Task<ColorResponse> CreateColor(ColorResponse color);
+        Task<ColorResponse> UpdateColor(int id, ColorResponse color);
+        Task<ColorResponse> DeleteColor(int id);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -115,6 +117,81 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 Status = color.Status,
                 CreatedAt = reader.GetDateTime(1)
             };
+        }
+
+        public async Task<ColorResponse> UpdateColor(int id, ColorResponse color)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+            // Check if color exists
+            using (var checkCmd = new NpgsqlCommand(
+                "SELECT COUNT(*) FROM colors WHERE id=@id", con))
+            {
+                checkCmd.Parameters.AddWithValue("@id", id);
+                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+                if (count == 0)
+                    throw new Exception("Color not found.");
+            }
+
+            // Dynamic color code — API se aa raha hai
+            string colorCode = await GetColorCode(color.ColorName);
+
+            using var cmd = new NpgsqlCommand(@"
+        UPDATE colors
+        SET color_name=@color_name, color_code=@color_code, status=@status
+        WHERE id=@id
+        RETURNING id, created_at;
+    ", con);
+
+            cmd.Parameters.AddWithValue("@id", id);
+            cmd.Parameters.AddWithValue("@color_name", color.ColorName);
+            cmd.Parameters.AddWithValue("@color_code", colorCode);
+            cmd.Parameters.AddWithValue("@status", color.Status);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                throw new Exception("Failed to update color.");
+
+            return new ColorResponse
+            {
+                Id = reader.GetInt32(0),
+                ColorName = color.ColorName,
+                ColorCode = colorCode,
+                Status = color.Status,
+                CreatedAt = reader.GetDateTime(1)
+            };
+        }
+
+        public async Task<ColorResponse> DeleteColor(int id)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+            // Check if color exists
+            using (var checkCmd = new NpgsqlCommand(
+                "SELECT id, color_name, color_code, status, created_at FROM colors WHERE id=@id", con))
+            {
+                checkCmd.Parameters.AddWithValue("@id", id);
+                using var reader = await checkCmd.ExecuteReaderAsync();
+                if (!await reader.ReadAsync())
+                    throw new Exception("Color not found.");
+                var color = new ColorResponse
+                {
+                    Id = reader.GetInt32(0),
+                    ColorName = reader.GetString(1),
+                    ColorCode = reader.GetString(2),
+                    Status = reader.GetBoolean(3),
+                    CreatedAt = reader.GetDateTime(4)
+                };
+                reader.Close();
+                // Delete the color
+                using var deleteCmd = new NpgsqlCommand(
+                    "DELETE FROM colors WHERE id=@id", con);
+                deleteCmd.Parameters.AddWithValue("@id", id);
+                var rowsAffected = await deleteCmd.ExecuteNonQueryAsync();
+                if (rowsAffected == 0)
+                    throw new Exception("Failed to delete color.");
+                return color;
+            }
         }
     }
 }

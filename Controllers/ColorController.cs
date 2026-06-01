@@ -41,5 +41,44 @@ namespace Ecommerce_Backend.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
+
+        [HttpPut("update/{id}")]
+        public async Task<IActionResult> UpdateColor(int id, [FromBody] ColorResponse color)
+        {
+            try
+            {
+                var updatedColor = await businessLayer.UpdateColor(id, color);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Color updated successfully.",
+                    data = updatedColor
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpDelete("delete/{id}")]
+        public async Task<IActionResult> DeleteColor(int id)
+        {
+            try
+            {
+                await businessLayer.DeleteColor(id);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Color deleted successfully."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+
+
+        }
     }
 }
