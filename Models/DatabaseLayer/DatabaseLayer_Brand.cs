@@ -9,6 +9,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         Task<IActionResult> AddBrand(BrandModel brand);
         Task<IActionResult> GetAllBrands();
+        Task<IActionResult> UpdateBrand(int id, [FromForm] BrandModel brand);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -83,7 +84,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     (
                         brand_name,
                         brand_img,
-is_active
+                        is_active
                     )
                     VALUES
                     (
@@ -161,5 +162,87 @@ is_active
         }
 
 
+        public async Task<IActionResult> UpdateBrand(int id, [FromForm] BrandModel brand)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+                // Check if brand exists
+                using var checkCmd = new NpgsqlCommand(
+                    "SELECT COUNT(*) FROM brands WHERE id=@id",
+                    con
+                );
+                checkCmd.Parameters.AddWithValue("@id", id);
+                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+                if (count == 0)
+                {
+                    return new NotFoundObjectResult(new
+                    {
+                        status = false,
+                        message = "Brand not found"
+                    });
+                }
+                // Cloudinary Upload (if new file provided)
+                string imageUrl = brand.BrandImg ?? "";
+                if (brand.BrandFile != null && brand.BrandFile.Length > 0)
+                {
+                    var account = new Account(
+                        _configuration["CloudinarySettings:CloudName"],
+                        _configuration["CloudinarySettings:ApiKey"],
+                        _configuration["CloudinarySettings:ApiSecret"]
+                    );
+                    var cloudinary = new Cloudinary(account);
+                    using var stream = brand.BrandFile.OpenReadStream();
+                    var uploadParams = new ImageUploadParams
+                    {
+                        File = new FileDescription(
+                            brand.BrandFile.FileName,
+                            stream
+                        ),
+                        Folder = "brands"
+                    };
+                    var uploadResult = await cloudinary.UploadAsync(uploadParams);
+                    if (uploadResult.Error != null)
+                    {
+                        return new BadRequestObjectResult(new
+                        {
+                            status = false,
+                            message = uploadResult.Error.Message
+                        });
+                    }
+                    imageUrl = uploadResult.SecureUrl.ToString();
+                }
+                // Update Brand
+                using var cmd = new NpgsqlCommand(@"
+                    UPDATE brands SET
+                    brand_name=@brand_name,
+                    brand_img=@brand_img,
+                    is_active=@is_active
+                    WHERE id=@id;
+                ", con);
+                cmd.Parameters.AddWithValue("@brand_name", brand.BrandName ?? "");
+                cmd.Parameters.AddWithValue("@brand_img", imageUrl);
+                cmd.Parameters.AddWithValue("@is_active", brand.IsActive);
+                cmd.Parameters.AddWithValue("@id", id);
+                await cmd.ExecuteNonQueryAsync();
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Brand updated successfully",
+                    id = id,
+                    brandName = brand.BrandName,
+                    brandImage = imageUrl,
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
     }
 }
