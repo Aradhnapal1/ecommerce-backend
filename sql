@@ -63,3 +63,22 @@ CREATE TABLE categories
         REFERENCES categories(id)
         ON DELETE CASCADE
 );
+
+
+
+CREATE TABLE contacts
+(
+    id SERIAL PRIMARY KEY,
+
+    first_name VARCHAR(100) NOT NULL,
+
+    last_name VARCHAR(100) NOT NULL,
+
+    email VARCHAR(255) NOT NULL,
+
+    phone_number VARCHAR(20),
+
+    message TEXT NOT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
