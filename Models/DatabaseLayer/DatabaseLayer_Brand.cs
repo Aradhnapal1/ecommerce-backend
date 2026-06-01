@@ -185,7 +185,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     });
                 }
                 // Cloudinary Upload (if new file provided)
+                // Cloudinary Upload (if new file provided)
                 string imageUrl = brand.BrandImg ?? "";
+
                 if (brand.BrandFile != null && brand.BrandFile.Length > 0)
                 {
                     var account = new Account(
@@ -193,8 +195,59 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         _configuration["CloudinarySettings:ApiKey"],
                         _configuration["CloudinarySettings:ApiSecret"]
                     );
+
                     var cloudinary = new Cloudinary(account);
+
+                    // Get old image url from database
+                    string oldImageUrl = "";
+
+                    using (var getCmd = new NpgsqlCommand(
+                        "SELECT brand_img FROM brands WHERE id=@id",
+                        con))
+                    {
+                        getCmd.Parameters.AddWithValue("@id", id);
+
+                        var result = await getCmd.ExecuteScalarAsync();
+                        oldImageUrl = result?.ToString() ?? "";
+                    }
+
+                    // Delete old image from Cloudinary
+                    if (!string.IsNullOrEmpty(oldImageUrl))
+                    {
+                        try
+                        {
+                            var uri = new Uri(oldImageUrl);
+
+                            var parts = uri.AbsolutePath.Split("/upload/");
+
+                            if (parts.Length > 1)
+                            {
+                                var publicId = parts[1];
+
+                                // Remove version number
+                                publicId = System.Text.RegularExpressions.Regex
+                                    .Replace(publicId, @"^v\d+\/", "");
+
+                                // Remove file extension
+                                publicId = Path.Combine(
+                                    Path.GetDirectoryName(publicId) ?? "",
+                                    Path.GetFileNameWithoutExtension(publicId)
+                                ).Replace("\\", "/");
+
+                                await cloudinary.DestroyAsync(
+                                    new DeletionParams(publicId)
+                                );
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore delete errors
+                        }
+                    }
+
+                    // Upload new image
                     using var stream = brand.BrandFile.OpenReadStream();
+
                     var uploadParams = new ImageUploadParams
                     {
                         File = new FileDescription(
@@ -203,7 +256,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         ),
                         Folder = "brands"
                     };
+
                     var uploadResult = await cloudinary.UploadAsync(uploadParams);
+
                     if (uploadResult.Error != null)
                     {
                         return new BadRequestObjectResult(new
@@ -212,6 +267,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             message = uploadResult.Error.Message
                         });
                     }
+
                     imageUrl = uploadResult.SecureUrl.ToString();
                 }
                 // Update Brand
