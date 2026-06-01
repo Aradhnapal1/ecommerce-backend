@@ -42,3 +42,24 @@ CREATE TABLE brands
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
+CREATE TABLE categories
+(
+    id SERIAL PRIMARY KEY,
+
+    category_name VARCHAR(255) NOT NULL,
+
+    parent_id INT NULL,
+
+    category_image TEXT,
+
+    is_active BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_parent_category
+        FOREIGN KEY (parent_id)
+        REFERENCES categories(id)
+        ON DELETE CASCADE
+);

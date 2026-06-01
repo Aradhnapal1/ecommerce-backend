@@ -86,4 +86,35 @@ namespace Ecommerce_Backend.Models
         public string ApiKey { get; set; } = string.Empty;
         public string ApiSecret { get; set; } = string.Empty;
     }
+
+    public class CategoryModel
+    {
+        public int Id { get; set; }
+
+        public string CategoryName { get; set; } = "";
+
+        public int? ParentId { get; set; }
+
+        // Database me save hone wali image URL
+        public string? CategoryImage { get; set; }
+
+        // Upload ke liye file
+        public IFormFile? CategoryFile { get; set; }
+
+        public bool IsActive { get; set; }
+    }
+    public class CategoryTreeModel
+    {
+        public int Id { get; set; }
+
+        public string CategoryName { get; set; } = "";
+
+        public int? ParentId { get; set; }
+
+        public string? CategoryImage { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public List<CategoryTreeModel> Children { get; set; } = new();
+    }
 }
