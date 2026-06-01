@@ -30,5 +30,17 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.GetCategories();
         }
+
+        [HttpPut("updatecategory/{id}")]
+        public async Task<IActionResult> UpdateCategory(int id,[FromForm] CategoryModel category)
+        {
+            return await _businessLayer.UpdateCategory(id, category);
+        }
+
+        [HttpDelete("deletecategory/{id}")]
+        public async Task<IActionResult> DeleteCategory(int id)
+        {
+            return await _businessLayer.DeleteCategory(id);
+        }
     }
 }

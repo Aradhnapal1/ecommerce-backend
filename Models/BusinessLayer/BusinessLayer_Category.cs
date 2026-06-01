@@ -6,6 +6,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     {
         Task<IActionResult> AddCategory([FromForm] CategoryModel category);
         Task<IActionResult> GetCategories();
+        Task<IActionResult> UpdateCategory(int id, [FromForm] CategoryModel category);
+        Task<IActionResult> DeleteCategory(int id);
     }
     public partial class BusinessLayer : IBusinessLayer
     {
@@ -51,5 +53,56 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 return new StatusCodeResult(500); // Internal Server Error
             }
         }
+
+
+
+
+
+
+        public async Task<IActionResult> UpdateCategory(int id, [FromForm] CategoryModel category)
+        {
+            try
+            {
+                var result = await _databaseLayer.UpdateCategory(id, category);
+                if (result != null)
+                {
+                    return new OkObjectResult(result);
+                }
+                else
+                {
+                    return new BadRequestObjectResult("Failed to update category.");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (not implemented here)
+                return new StatusCodeResult(500); // Internal Server Error
+            }
+        }
+
+        public async Task<IActionResult> DeleteCategory(int id)
+        {
+            try
+            {
+                var result = await _databaseLayer.DeleteCategory(id);
+                if (result != null)
+                {
+                    return new OkObjectResult(result);
+                }
+                else
+                {
+                    return new BadRequestObjectResult("Failed to delete category.");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception (not implemented here)
+                return new StatusCodeResult(500); // Internal Server Error
+
+
+            }
+        }
     }
+
+
 }
