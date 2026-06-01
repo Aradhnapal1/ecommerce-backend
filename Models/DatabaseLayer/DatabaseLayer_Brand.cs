@@ -253,32 +253,79 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             {
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
-                // Check if brand exists
-                using var checkCmd = new NpgsqlCommand(
-                    "SELECT COUNT(*) FROM brands WHERE id=@id",
-                    con
-                );
-                checkCmd.Parameters.AddWithValue("@id", id);
-                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-                if (count == 0)
+
+                string imageUrl = "";
+
+                // Get Brand Image URL
+                using (var getCmd = new NpgsqlCommand(
+                    "SELECT brand_img FROM brands WHERE id=@id", con))
                 {
-                    return new NotFoundObjectResult(new
+                    getCmd.Parameters.AddWithValue("@id", id);
+
+                    var result = await getCmd.ExecuteScalarAsync();
+
+                    if (result == null)
                     {
-                        status = false,
-                        message = "Brand not found"
-                    });
+                        return new NotFoundObjectResult(new
+                        {
+                            status = false,
+                            message = "Brand not found"
+                        });
+                    }
+
+                    imageUrl = result.ToString() ?? "";
                 }
-                // Delete Brand
-                using var cmd = new NpgsqlCommand(
+
+                // Delete image from Cloudinary
+                if (!string.IsNullOrEmpty(imageUrl))
+                {
+                    var account = new Account(
+                        _configuration["CloudinarySettings:CloudName"],
+                        _configuration["CloudinarySettings:ApiKey"],
+                        _configuration["CloudinarySettings:ApiSecret"]
+                    );
+
+                    var cloudinary = new Cloudinary(account);
+
+                    // Example URL:
+                    // https://res.cloudinary.com/.../upload/v1780125501/brands/abc123.png
+
+                    var uri = new Uri(imageUrl);
+                    var segments = uri.AbsolutePath.Split("/upload/");
+
+                    if (segments.Length > 1)
+                    {
+                        var publicId = segments[1];
+
+                        // Remove version number
+                        publicId = System.Text.RegularExpressions.Regex
+                            .Replace(publicId, @"^v\d+\/", "");
+
+                        // Remove extension
+                        publicId = Path.Combine(
+                            Path.GetDirectoryName(publicId) ?? "",
+                            Path.GetFileNameWithoutExtension(publicId)
+                        ).Replace("\\", "/");
+
+                        var deleteParams = new DeletionParams(publicId);
+
+                        await cloudinary.DestroyAsync(deleteParams);
+                    }
+                }
+
+                // Delete Brand from Database
+                using var deleteCmd = new NpgsqlCommand(
                     "DELETE FROM brands WHERE id=@id",
-                    con
-                );
-                cmd.Parameters.AddWithValue("@id", id);
-                await cmd.ExecuteNonQueryAsync();
+                    con);
+
+                deleteCmd.Parameters.AddWithValue("@id", id);
+
+                await deleteCmd.ExecuteNonQueryAsync();
+
                 return new OkObjectResult(new
                 {
                     status = true,
-                    message = "Brand deleted successfully"
+                    message = "Brand and image deleted successfully"
                 });
             }
             catch (Exception ex)

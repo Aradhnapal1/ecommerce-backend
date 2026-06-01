@@ -58,6 +58,7 @@ builder.Services.Configure<CloudinarySettings>(
 
 builder.Services.AddScoped<CloudinaryService>();
 
+
 // ? Services
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
