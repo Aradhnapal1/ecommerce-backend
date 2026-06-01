@@ -41,6 +41,12 @@ namespace Ecommerce_Backend.Controllers
 
         }
 
+        [HttpDelete("deletebrand/{id}")]
+        public async Task<IActionResult> DeleteBrand(int id)
+        {
+            return await _businessLayer.DeleteBrand(id);
 
+
+        }
     }
 }

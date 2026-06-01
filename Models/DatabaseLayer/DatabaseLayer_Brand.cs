@@ -10,11 +10,12 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> AddBrand(BrandModel brand);
         Task<IActionResult> GetAllBrands();
         Task<IActionResult> UpdateBrand(int id, [FromForm] BrandModel brand);
+        Task<IActionResult> DeleteBrand(int id);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
     {
-    
+
         public async Task<IActionResult> AddBrand(BrandModel brand)
         {
             try
@@ -123,7 +124,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
 
         public async Task<IActionResult> GetAllBrands()
-            {
+        {
             try
             {
                 var brands = new List<BrandModel>();
@@ -233,6 +234,51 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     id = id,
                     brandName = brand.BrandName,
                     brandImage = imageUrl,
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+
+        public async Task<IActionResult> DeleteBrand(int id)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+                // Check if brand exists
+                using var checkCmd = new NpgsqlCommand(
+                    "SELECT COUNT(*) FROM brands WHERE id=@id",
+                    con
+                );
+                checkCmd.Parameters.AddWithValue("@id", id);
+                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+                if (count == 0)
+                {
+                    return new NotFoundObjectResult(new
+                    {
+                        status = false,
+                        message = "Brand not found"
+                    });
+                }
+                // Delete Brand
+                using var cmd = new NpgsqlCommand(
+                    "DELETE FROM brands WHERE id=@id",
+                    con
+                );
+                cmd.Parameters.AddWithValue("@id", id);
+                await cmd.ExecuteNonQueryAsync();
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Brand deleted successfully"
                 });
             }
             catch (Exception ex)

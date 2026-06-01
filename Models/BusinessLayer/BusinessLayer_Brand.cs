@@ -7,6 +7,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> AddBrand(BrandModel brand);
         Task<IActionResult> GetAllBrands();
         Task<IActionResult> UpdateBrand(int id, [FromForm] BrandModel brand);
+        Task<IActionResult> DeleteBrand(int id);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -62,6 +63,21 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             }
             // Image update is optional, so no need to check for it
             return await _databaseLayer.UpdateBrand(id, brand);
+        }
+
+
+
+        public async Task<IActionResult> DeleteBrand(int id)
+        {
+            if (id <= 0)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = "Invalid brand ID"
+                });
+            }
+            return await _databaseLayer.DeleteBrand(id);
         }
     }
 }
