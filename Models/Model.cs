@@ -80,6 +80,17 @@ namespace Ecommerce_Backend.Models
         public IFormFile? BrandFile { get; set; }
     }
 
+    public class BlogModel
+    {
+        public int id { get; set; }
+        public string BlogName { get; set; }
+        public string? BlogImg { get; set; }
+        public IFormFile? BlogFile { get; set; }
+        public bool Status { get; set; }
+        public string Description {  get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+
     public class CloudinarySettings
     {
         public string CloudName { get; set; } = string.Empty;

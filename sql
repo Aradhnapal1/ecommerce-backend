@@ -63,3 +63,17 @@ CREATE TABLE categories
         REFERENCES categories(id)
         ON DELETE CASCADE
 );
+
+CREATE TABLE   (
+    id SERIAL PRIMARY KEY,
+
+    blog_name VARCHAR(255) NOT NULL,
+
+    description TEXT NOT NULL,
+
+    blog_image TEXT,
+
+    status BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
