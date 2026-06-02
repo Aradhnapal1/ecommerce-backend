@@ -44,8 +44,6 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> DeleteBrand(int id)
         {
             return await _businessLayer.DeleteBrand(id);
-
-
         }
     }
 }

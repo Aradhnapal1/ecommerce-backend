@@ -52,7 +52,6 @@ namespace Ecommerce_Backend.Controllers
                 {
                     success = true,
                     message = "Color updated successfully.",
-                    data = updatedColor
                 });
             }
             catch (Exception ex)
