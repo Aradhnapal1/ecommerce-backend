@@ -12,9 +12,6 @@ namespace Ecommerce_Backend.Controllers
         private readonly IBusinessLayer _businessLayer;
         private readonly CloudinaryService _cloudinary;
 
-
-
-
         public BrandController(IBusinessLayer businessLayer, CloudinaryService cloudinary)
         {
             _businessLayer = businessLayer;
