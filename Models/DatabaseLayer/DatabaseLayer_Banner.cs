@@ -91,7 +91,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     });
                 }
 
-                // Cloudinary Upload
+                // Cloudinary Uploadd
                 var account = new Account(
                     _configuration["CloudinarySettings:CloudName"],
                     _configuration["CloudinarySettings:ApiKey"],
