@@ -1,4 +1,5 @@
-﻿using Ecommerce_Backend.Models.BusinessLayer;
+﻿using Ecommerce_Backend.Models;
+using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,6 +21,12 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> GetBanner()
         {
             return await _businessLayer.GetBanner();
+        }
+
+        [HttpPost("addbanner")]
+        public async Task<IActionResult> AddBanner([FromForm] BannerModel banner)
+        {
+            return await _businessLayer.AddBanner(banner);
         }
     }
 }
