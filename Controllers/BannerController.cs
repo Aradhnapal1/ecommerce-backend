@@ -34,5 +34,11 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.UpdateBanner(id, banner);
         }
+
+        [HttpDelete("delete/{id}")]
+        public async Task<IActionResult> DeleteBanner(int id)
+        {
+            return await _businessLayer.DeleteBanner(id);
+        }
     }
 }

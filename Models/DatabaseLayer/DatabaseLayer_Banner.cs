@@ -12,6 +12,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<List<BannerModel>> GetBanner();
         Task<IActionResult> AddBanner([FromForm] BannerModel banner);
         Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner);
+        Task<IActionResult> DeleteBanner(int id);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -312,6 +313,89 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     status = true,
                     message = "Banner updated successfully"
                 });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        public async Task<IActionResult> DeleteBanner(int id)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+                string imageUrl = "";
+                using (var getCmd = new NpgsqlCommand(
+                    "SELECT banner_image FROM banners WHERE id = @id",
+                    con))
+                {
+                    getCmd.Parameters.AddWithValue("@id", id);
+                    var result = await getCmd.ExecuteScalarAsync();
+                    if (result == null)
+                    {
+                        return new NotFoundObjectResult(new
+                        {
+                            status = false,
+                            message = "Blog not found"
+                        });
+                    }
+
+                    imageUrl = result.ToString() ?? "";
+                }
+                if(!string.IsNullOrEmpty(imageUrl))
+                {
+                    var account = new Account(
+                        _configuration["CloudinarySettings:CloudName"],
+                        _configuration["CloudinarySettings:ApiKey"],
+                        _configuration["CloudinarySettings:ApiSecret"]
+                    );
+                    var cloudinary = new Cloudinary(account);
+                    try
+                    {
+                        var uri = new Uri(imageUrl);
+                        var parts = uri.AbsolutePath.Split("/upload/");
+                        if (parts.Length > 1)
+                        {
+                            var publicId = parts[1];
+                            // Remove version number
+                            publicId = System.Text.RegularExpressions.Regex
+                                .Replace(publicId, @"^v\d+\/", "");
+                            // Remove extension
+                            publicId = Path.Combine(
+                                Path.GetDirectoryName(publicId) ?? "",
+                                Path.GetFileNameWithoutExtension(publicId)
+                            ).Replace("\\", "/");
+                            await cloudinary.DestroyAsync(
+                                new DeletionParams(publicId)
+                            );
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore delete errors
+                    }
+                } 
+
+                using var deleteCmd = new NpgsqlCommand(
+                    "DELETE FROM banners WHERE id = @id",
+                    con
+                );
+                deleteCmd.Parameters.AddWithValue("@id", id);
+
+                await deleteCmd.ExecuteNonQueryAsync();
+
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Blog  deleted successfully"
+                });
+
             }
             catch (Exception ex)
             {
