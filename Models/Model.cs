@@ -184,5 +184,17 @@ namespace Ecommerce_Backend.Models
         public DateTime UpdatedAt { get; set; }
     }
 
+    public class BannerModel
+    {
+        public int Id { get; set; }
+        public string? BannerName { get; set; }
+        public string? BannerDescription { get; set; }
+        public string? BannerImg { get; set; }
+        public string? BannerType { get; set; }
+        public string? BannerLink { get; set; }
+        public IFormFile? BannerFile { get; set; }
+        public bool Status { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
 
 }
