@@ -145,4 +145,42 @@ namespace Ecommerce_Backend.Models
 
         public DateTime CreatedAt { get; set; }
     }
+
+    public class ProductModel
+    {
+        public int Id { get; set; }
+
+        public string ProductName { get; set; }
+        public string? ShortDescription { get; set; }
+        public string? Description { get; set; }
+
+        public string? SKU { get; set; }
+
+        public int? BrandId { get; set; }
+        public int? CategoryId { get; set; }
+
+        public decimal BasePrice { get; set; }
+        public decimal MRP { get; set; }
+        public decimal? DiscountPrice { get; set; }
+        public decimal SalePrice { get; set; }
+        public decimal GST { get; set; }
+
+        public int Stock { get; set; }
+
+        public string? ProductImageUrl { get; set; }
+
+        // PostgreSQL TEXT[]
+        public string[]? GalleryImages { get; set; }
+
+        public string[]? Sizes { get; set; }
+
+        public string? Color { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+
 }
