@@ -96,3 +96,49 @@ CREATE TABLE contacts
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
+
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+
+    productname VARCHAR(255) NOT NULL,
+    shortdescription VARCHAR(500),
+    description TEXT,
+
+    sku VARCHAR(100) UNIQUE,
+
+    brandid INT,
+    categoryid INT,
+  
+
+    baseprice NUMERIC(10,2) NOT NULL,
+    mrp NUMERIC(10,2) NOT NULL,
+    discountprice NUMERIC(10,2),
+    saleprice NUMERIC(10,2) NOT NULL,
+    gst NUMERIC(5,2) DEFAULT 0,
+
+    stock INT DEFAULT 0,
+
+    productimageurl TEXT,
+    galleryimages TEXT[],
+
+    sizes TEXT[],
+    color VARCHAR(100),
+
+    isactive BOOLEAN DEFAULT TRUE,
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_product_brand
+        FOREIGN KEY (brandid)
+        REFERENCES brands(id),
+
+    CONSTRAINT fk_product_category
+        FOREIGN KEY (categoryid)
+        REFERENCES categories(id)
+
+   
+  
+);
