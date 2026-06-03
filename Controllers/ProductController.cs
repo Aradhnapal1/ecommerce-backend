@@ -1,4 +1,6 @@
-﻿using Ecommerce_Backend.Models.BusinessLayer;
+﻿using Ecommerce_Backend.Models;
+using Ecommerce_Backend.Models.BusinessLayer;
+using Ecommerce_Backend.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -9,9 +11,14 @@ namespace Ecommerce_Backend.Controllers
     {
 
         private readonly IBusinessLayer _businessLayer;
-        public ProductController(IBusinessLayer businessLayer)
+        private readonly CloudinaryService _cloudinary;
+
+
+
+        public ProductController(IBusinessLayer businessLayer, CloudinaryService cloudinary)
         {
             _businessLayer = businessLayer;
+            _cloudinary = cloudinary;
         }
 
         [HttpGet("getallproducts")]
@@ -19,5 +26,13 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.GetAllProducts();
         }
+
+        [HttpPost("addproduct")]
+        public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
+        {
+           var result = await _businessLayer.AddProduct(product);
+            return Ok(result);
+        }
+
     }
 }
