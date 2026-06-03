@@ -99,6 +99,15 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         {
             try
             {
+                if (product == null)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        status = false,
+                        message = "Product is null"
+                    });
+                }
+
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
@@ -116,9 +125,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 // =========================
                 // MAIN IMAGE UPLOAD
                 // =========================
-                string productImageUrl = "";
+                string productImageUrl = null;
 
-                if (product.ProductImage != null)
+                if (product.ProductImage != null && product.ProductImage.Length > 0)
                 {
                     using var stream = product.ProductImage.OpenReadStream();
 
@@ -130,7 +139,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                     var uploadResult = await cloudinary.UploadAsync(uploadParams);
 
-                    if (uploadResult.Error != null)
+                    if (uploadResult?.Error != null)
                     {
                         return new BadRequestObjectResult(new
                         {
@@ -139,7 +148,15 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         });
                     }
 
-                    productImageUrl = uploadResult.SecureUrl.ToString();
+                    productImageUrl = uploadResult?.SecureUrl?.ToString();
+                }
+                else
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        status = false,
+                        message = "ProductImage is required (Postman key: ProductImage)"
+                    });
                 }
 
                 // =========================
@@ -151,6 +168,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     foreach (var file in product.GalleryFiles)
                     {
+                        if (file == null || file.Length == 0) continue;
+
                         using var stream = file.OpenReadStream();
 
                         var uploadParams = new ImageUploadParams
@@ -161,7 +180,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                         var uploadResult = await cloudinary.UploadAsync(uploadParams);
 
-                        if (uploadResult.Error == null)
+                        if (uploadResult?.Error == null && uploadResult?.SecureUrl != null)
                         {
                             galleryUrls.Add(uploadResult.SecureUrl.ToString());
                         }
@@ -206,17 +225,15 @@ VALUES
                 cmd.Parameters.AddWithValue("BrandId", (object?)product.BrandId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("CategoryId", (object?)product.CategoryId ?? DBNull.Value);
 
-                cmd.Parameters.AddWithValue("BasePrice", product.BasePrice);
+                cmd.Parameters.AddWithValue("BasePrice", product.BasePrice ?? 0);
                 cmd.Parameters.AddWithValue("MRP", product.MRP);
-
                 cmd.Parameters.AddWithValue("DiscountPrice", discountPercent);
-
-                cmd.Parameters.AddWithValue("SalePrice", product.SalePrice);
+                cmd.Parameters.AddWithValue("SalePrice", product.SalePrice ?? 0);
                 cmd.Parameters.AddWithValue("GST", product.GST);
                 cmd.Parameters.AddWithValue("Stock", product.Stock);
 
                 cmd.Parameters.AddWithValue("ProductImageUrl",
-                    string.IsNullOrEmpty(productImageUrl) ? DBNull.Value : productImageUrl);
+                    (object?)productImageUrl ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("GalleryImages",
                     galleryUrls.Count > 0 ? galleryUrls.ToArray() : (object)DBNull.Value);
@@ -227,7 +244,8 @@ VALUES
                 cmd.Parameters.AddWithValue("Color",
                     (object?)product.Color ?? DBNull.Value);
 
-                cmd.Parameters.AddWithValue("IsActive", product.IsActive);
+                cmd.Parameters.AddWithValue("IsActive",
+                    product.IsActive);
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -237,7 +255,8 @@ VALUES
                     message = "Product added successfully",
                     productImage = productImageUrl,
                     galleryImages = galleryUrls,
-                    salePrice = product.SalePrice
+                    basePrice,
+                    salePrice
                 });
             }
             catch (Exception ex)
