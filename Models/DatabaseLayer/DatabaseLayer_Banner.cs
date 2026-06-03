@@ -9,45 +9,42 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 {
     public partial interface IDatabaseLayer
     {
-        Task<IActionResult> GetBanner();
+        Task<List<BannerModel>> GetBanner();
         Task<IActionResult> AddBanner([FromForm] BannerModel banner);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
     {
-        public async Task<IActionResult> GetBanner()
+        public async Task<List<BannerModel>> GetBanner()
         {
+            var banners = new List<BannerModel>();
+
             try
             {
-                var banners = new List<BannerModel>();
-
                 await using var connection = new NpgsqlConnection(DbConnection);
                 await connection.OpenAsync();
 
                 await using var cmd = new NpgsqlCommand(
                     @"SELECT 
-                        id,
-                        banner_name,
-                        banner_description,
-                        banner_image,
-                        banner_type,
-                        banner_link,
-                        active,
-                        created_at
-                    FROM banners
-                    ORDER BY created_at DESC",
+                id,
+                banner_name,
+                banner_description,
+                banner_image,
+                banner_type,
+                banner_link,
+                active,
+                created_at
+            FROM banners
+            ORDER BY created_at DESC",
                     connection);
 
                 await using var reader = await cmd.ExecuteReaderAsync();
 
                 while (await reader.ReadAsync())
                 {
-                    var banner = new BannerModel
+                    banners.Add(new BannerModel
                     {
-                        // If ID is SERIAL/INT
                         Id = reader.GetInt32(0),
-
-                        // If columns can be NULL, handle safely
                         BannerName = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
                         BannerDescription = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
                         BannerImg = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
@@ -57,20 +54,14 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         CreatedAt = reader.IsDBNull(7)
                             ? DateTime.MinValue
                             : reader.GetDateTime(7)
-                    };
-
-                    banners.Add(banner);
+                    });
                 }
 
-                return new OkObjectResult(banners);
+                return banners;
             }
             catch (Exception ex)
             {
-                return new BadRequestObjectResult(new
-                {
-                    Message = "Failed to fetch banners",
-                    Error = ex.Message
-                });
+                throw new Exception($"Failed to fetch banners: {ex.Message}");
             }
         }
 
@@ -165,7 +156,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     status = true,
                     message = "Banner added successfully",
-                    imageUrl
                 });
             }
             catch (Exception ex)

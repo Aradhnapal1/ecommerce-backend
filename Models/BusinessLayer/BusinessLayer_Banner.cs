@@ -19,7 +19,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<IActionResult> AddBanner([FromForm] BannerModel banner)
         {
             var result = await _databaseLayer.AddBanner(banner);
-            return new OkObjectResult(result);
+            return result;
         }
     }
 }
