@@ -11,10 +11,6 @@ CREATE TABLE user_register
     is_verified  BOOLEAN      DEFAULT FALSE,
     created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
-
-
-
-
 CREATE TABLE sizes (
     id SERIAL PRIMARY KEY,
     size_name VARCHAR(20) NOT NULL,
@@ -141,4 +137,20 @@ CREATE TABLE products (
 
    
   
+);
+CREATE TABLE banners (
+     id SERIAL PRIMARY KEY,
+
+    banner_name VARCHAR(255) NOT NULL,
+    banner_description TEXT,
+
+    banner_image TEXT NOT NULL,
+
+    banner_type VARCHAR(100) NOT NULL,
+
+    banner_link TEXT,
+
+    active BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
