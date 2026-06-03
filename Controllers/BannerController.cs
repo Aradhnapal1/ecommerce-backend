@@ -28,5 +28,11 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.AddBanner(banner);
         }
+
+        [HttpPut("update/{id}")]
+        public async Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner)
+        {
+            return await _businessLayer.UpdateBanner(id, banner);
+        }
     }
 }

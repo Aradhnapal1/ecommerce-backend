@@ -6,6 +6,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     {
         Task<IActionResult> GetBanner();
         Task<IActionResult> AddBanner([FromForm] BannerModel banner);
+        Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -19,6 +20,12 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<IActionResult> AddBanner([FromForm] BannerModel banner)
         {
             var result = await _databaseLayer.AddBanner(banner);
+            return result;
+        }
+
+        public async Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner)
+        {
+            var result = await _databaseLayer.UpdateBanner(id, banner);
             return result;
         }
     }

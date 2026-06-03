@@ -11,6 +11,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         Task<List<BannerModel>> GetBanner();
         Task<IActionResult> AddBanner([FromForm] BannerModel banner);
+        Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -168,6 +169,157 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     StatusCode = 500
                 };
+            }
+        }
+
+        public async Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                // Check if Banner exists
+                using var checkCmd = new NpgsqlCommand(
+                    "SELECT COUNT(*) FROM banners WHERE id = @id",
+                    con
+                );
+
+                checkCmd.Parameters.AddWithValue("@id", id);
+
+                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+                if (count == 0)
+                {
+                    return new NotFoundObjectResult(new
+                    {
+                        status = false,
+                        message = "Banner not found"
+                    });
+                }
+
+                string imageUrl = banner.BannerImg ?? "";
+
+                // Upload new image if provided
+                if (banner.BannerFile != null && banner.BannerFile.Length > 0)
+                {
+                    var account = new Account(
+                        _configuration["CloudinarySettings:CloudName"],
+                        _configuration["CloudinarySettings:ApiKey"],
+                        _configuration["CloudinarySettings:ApiSecret"]
+                    );
+
+                    var cloudinary = new Cloudinary(account);
+
+                    // Get old image url
+                    string oldImageUrl = "";
+
+                    using (var getCmd = new NpgsqlCommand(
+                        "SELECT banner_image FROM banners WHERE id = @id",
+                        con))
+                    {
+                        getCmd.Parameters.AddWithValue("@id", id);
+
+                        var result = await getCmd.ExecuteScalarAsync();
+                        oldImageUrl = result?.ToString() ?? "";
+                    }
+
+                    // Delete old image from Cloudinary
+                    if (!string.IsNullOrEmpty(oldImageUrl))
+                    {
+                        try
+                        {
+                            var uri = new Uri(oldImageUrl);
+
+                            var parts = uri.AbsolutePath.Split("/upload/");
+
+                            if (parts.Length > 1)
+                            {
+                                var publicId = parts[1];
+
+                                // Remove version number
+                                publicId = System.Text.RegularExpressions.Regex
+                                    .Replace(publicId, @"^v\d+\/", "");
+
+                                // Remove extension
+                                publicId = Path.Combine(
+                                    Path.GetDirectoryName(publicId) ?? "",
+                                    Path.GetFileNameWithoutExtension(publicId)
+                                ).Replace("\\", "/");
+
+                                await cloudinary.DestroyAsync(
+                                    new DeletionParams(publicId)
+                                );
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore delete errors
+                        }
+                    }
+
+                    // Upload new image
+                    using var stream = banner.BannerFile.OpenReadStream();
+
+                    var uploadParams = new ImageUploadParams
+                    {
+                        File = new FileDescription(
+                            banner.BannerFile.FileName,
+                            stream
+                        ),
+                        Folder = "banner_images"
+                    };
+
+                    var uploadResult = await cloudinary.UploadAsync(uploadParams);
+
+                    if (uploadResult.Error != null)
+                    {
+                        return new BadRequestObjectResult(new
+                        {
+                            status = false,
+                            message = uploadResult.Error.Message
+                        });
+                    }
+
+                    imageUrl = uploadResult.SecureUrl.ToString();
+                }
+
+                // Update Banner
+                using var cmd = new NpgsqlCommand(@"
+            UPDATE banners
+            SET
+                banner_name = @banner_name,
+                banner_description = @banner_description,
+                banner_image = @banner_image,
+                banner_type = @banner_type,
+                banner_link = @banner_link,
+                active = @active
+            WHERE id = @id
+        ", con);
+
+                cmd.Parameters.AddWithValue("@banner_name", banner.BannerName ?? "");
+                cmd.Parameters.AddWithValue("@banner_description", banner.BannerDescription ?? "");
+                cmd.Parameters.AddWithValue("@banner_image", imageUrl);
+                cmd.Parameters.AddWithValue("@banner_type", banner.BannerType ?? "");
+                cmd.Parameters.AddWithValue("@banner_link", banner.BannerLink ?? "");
+                cmd.Parameters.AddWithValue("@active", banner.Status);
+                cmd.Parameters.AddWithValue("@id", id);
+
+                await cmd.ExecuteNonQueryAsync();
+
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Banner updated successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
             }
         }
     }
