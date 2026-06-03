@@ -159,10 +159,10 @@ namespace Ecommerce_Backend.Models
         public int? BrandId { get; set; }
         public int? CategoryId { get; set; }
 
-        public decimal BasePrice { get; set; }
+        public decimal? BasePrice { get; set; }
         public decimal MRP { get; set; }
         public decimal? DiscountPrice { get; set; }
-        public decimal SalePrice { get; set; }
+        public decimal? SalePrice { get; set; }
         public decimal GST { get; set; }
 
         public int Stock { get; set; }
@@ -171,6 +171,8 @@ namespace Ecommerce_Backend.Models
 
         // PostgreSQL TEXT[]
         public string[]? GalleryImages { get; set; }
+        public IFormFile? ProductImage { get; set; }
+        public List<IFormFile>? GalleryFiles { get; set; }
 
         public string[]? Sizes { get; set; }
 
