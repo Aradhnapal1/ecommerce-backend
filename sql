@@ -92,7 +92,7 @@ CREATE TABLE contacts
     phone_number VARCHAR(20),
 
     message TEXT NOT NULL,
->>>>>>> 5f56fe15f268a3c9b7d38356e846c72bc1e06be7
+
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
