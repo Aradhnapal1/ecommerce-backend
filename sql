@@ -64,8 +64,7 @@ CREATE TABLE categories
         ON DELETE CASCADE
 );
 
-<<<<<<< HEAD
-CREATE TABLE   (
+CREATE TABLE blogs   (
     id SERIAL PRIMARY KEY,
 
     blog_name VARCHAR(255) NOT NULL,
@@ -75,7 +74,9 @@ CREATE TABLE   (
     blog_image TEXT,
 
     status BOOLEAN DEFAULT TRUE,
-=======
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 
 CREATE TABLE contacts
