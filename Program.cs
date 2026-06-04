@@ -25,33 +25,73 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
     .AddEntityFrameworkStores<AppDbContext>();
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-//builder.Services.AddSwaggerGen();
+// builder.Services.AddSwaggerGen();
 
-// ? JWT Authentication
-builder.Services.AddAuthentication(options =>
+
+// =========================
+// CORS
+// =========================
+builder.Services.AddCors(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+    options.AddPolicy("CorsPolicy", policy =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(
-                                     Encoding.UTF8.GetBytes(
-                                         builder.Configuration["Jwt:Key"]!))
-    };
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                try
+                {
+                    var uri = new Uri(origin);
+
+                    return uri.Host.Equals(
+                        "localhost",
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                }
+                catch
+                {
+                    return false;
+                }
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
 });
 
 
-builder.Services.AddControllers();
+// =========================
+// JWT Authentication
+// =========================
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme =
+        JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme =
+        JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters =
+        new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+
+            IssuerSigningKey =
+                new SymmetricSecurityKey(
+                    Encoding.UTF8.GetBytes(
+                        builder.Configuration["Jwt:Key"]!
+                    )
+                )
+        };
+});
 
 builder.Services.Configure<CloudinarySettings>(
     builder.Configuration.GetSection("CloudinarySettings"));
@@ -59,30 +99,40 @@ builder.Services.Configure<CloudinarySettings>(
 builder.Services.AddScoped<CloudinaryService>();
 
 
-// ? Services
+// =========================
+// Services
+// =========================
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IDatabaseLayer, DataBaseLayer>();
 builder.Services.AddScoped<IBusinessLayer, BusinessLayer>();
 
+
 var app = builder.Build();
 
-//if (app.Environment.IsDevelopment())
-//{
-//    app.UseSwagger();
-//    app.UseSwaggerUI();
-//}
 
+// =========================
+// Production Settings
+// =========================
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
+// =========================
+// Middleware
+// =========================
 app.UseHttpsRedirection();
+
 app.UseRouting();
-app.UseAuthentication();  // ? pehle
-app.UseAuthorization();   // ? baad mein
+
+// CORS MUST COME BEFORE AUTHENTICATION
+app.UseCors("CorsPolicy");
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapStaticAssets();
 
 app.MapControllerRoute(
