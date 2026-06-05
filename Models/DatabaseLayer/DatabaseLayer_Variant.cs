@@ -2,6 +2,7 @@
 using CloudinaryDotNet.Actions;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
+using System.Text.RegularExpressions;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
 {
@@ -36,6 +37,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     VariantName = reader.IsDBNull(reader.GetOrdinal("variantname"))
                         ? null
                         : reader.GetString(reader.GetOrdinal("variantname")),
+                    Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
                     SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
 
                     Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
@@ -85,6 +87,22 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 );
 
                 var cloudinary = new Cloudinary(account);
+
+
+                // ================= SLUG GENERATOR =================
+                string GenerateSlug(string text)
+                {
+                    if (string.IsNullOrWhiteSpace(text))
+                        return "";
+
+                    text = text.ToLower().Trim();
+                    text = Regex.Replace(text, @"[^a-z0-9\s-]", "");
+                    text = Regex.Replace(text, @"\s+", "-");
+                    text = Regex.Replace(text, @"-+", "-");
+
+                    return text;
+                }
+
 
                 // ================= MAIN IMAGE =================
                 string variantImageUrl = "";
@@ -153,12 +171,48 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 variant.BasePrice = basePrice;
                 variant.SalePrice = salePrice;
 
+
+                // ================= SLUG BUILD =================
+                string baseSlug = GenerateSlug(variant.VariantName ?? "variant");
+
+           
+
+              
+
+                string slug = baseSlug;
+
+     
+
+              
+
+                // ================= UNIQUE SLUG CHECK =================
+                string originalSlug = slug;
+                int counter = 1;
+
+                while (true)
+                {
+                    using var checkCmd = new NpgsqlCommand(
+                        "SELECT COUNT(*) FROM product_variants WHERE slug = @Slug",
+                        con);
+
+                    checkCmd.Parameters.AddWithValue("Slug", slug);
+
+                    var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+                    if (count == 0)
+                        break;
+
+                    slug = $"{originalSlug}-{counter}";
+                    counter++;
+                }
+
                 // ================= INSERT QUERY =================
                 var query = @"
 INSERT INTO product_variants
 (
 productid,
 variantname,
+slug,
 sku,
 sizes,
 color,
@@ -178,6 +232,7 @@ VALUES
 (
 @ProductId,
 @VariantName,
+@Slug,
 @SKU,
 @Sizes,
 @Color,
@@ -199,6 +254,7 @@ RETURNING id";
 
                 cmd.Parameters.AddWithValue("ProductId", variant.ProductId);
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("Slug", slug);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Sizes", (object?)variant.Sizes ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);
@@ -305,6 +361,7 @@ UPDATE product_variants
 SET
 productid = @ProductId,
 variantname = @VariantName,
+slug = @Slug,
 sku = @SKU,
 sizes = @Sizes,
 color = @Color,
@@ -324,6 +381,7 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("Id", id);
                 cmd.Parameters.AddWithValue("ProductId", variant.ProductId);
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Sizes", (object?)variant.Sizes ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);

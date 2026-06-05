@@ -162,6 +162,7 @@ CREATE TABLE product_variants (
     id SERIAL PRIMARY KEY,
 
     productid INT NOT NULL,
+     slug VARCHAR(255) UNIQUE NOT NULL,
 
     sku VARCHAR(100),
 

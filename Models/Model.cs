@@ -206,6 +206,8 @@ namespace Ecommerce_Backend.Models
 
         public int ProductId { get; set; }
         public string? VariantName { get; set; }
+        public string? Slug { get; set; }
+
 
         public string? SKU { get; set; }
 
