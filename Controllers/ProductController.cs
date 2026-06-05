@@ -30,7 +30,7 @@ namespace Ecommerce_Backend.Controllers
         [HttpPost("addproduct")]
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
         {
-           var result = await _businessLayer.AddProduct(product);
+            var result = await _businessLayer.AddProduct(product);
             return Ok(result);
         }
 
@@ -49,5 +49,26 @@ namespace Ecommerce_Backend.Controllers
             return Ok(result);
         }
 
+
+        [HttpGet("getproductbyid/{id}")]
+        public async Task<IActionResult> GetProductById(int id)
+        {
+            var result = await _businessLayer.GetProductById(id);
+
+            if (result == null)
+            {
+                return NotFound(new
+                {
+                    status = false,
+                    message = "Product not found"
+                });
+            }
+
+            return Ok(new
+            {
+                status = true,
+                data = result
+            });
+        }
     }
 }

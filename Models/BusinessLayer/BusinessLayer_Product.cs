@@ -8,6 +8,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> AddProduct([FromForm] ProductModel product);
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
+        Task<ProductModel?> GetProductById(int id);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -35,6 +36,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             var result = await _databaseLayer.DeleteProduct(id);
             return new OkObjectResult(result);
+        }
+
+        public async Task<ProductModel?> GetProductById(int id)
+        {
+            return await _databaseLayer.GetProductById(id);
         }
     }
 }

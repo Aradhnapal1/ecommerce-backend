@@ -12,6 +12,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> AddProduct([FromForm] ProductModel product);
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
+        Task<ProductModel?> GetProductById(int id);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -804,5 +805,58 @@ WHERE id=@id
             }
         }
 
+
+
+
+        public async Task<ProductModel?> GetProductById(int id)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            var query = "SELECT * FROM products WHERE id = @id";
+
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("id", id);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync())
+                return null;
+
+            var product = new ProductModel
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("id")),
+                ProductName = reader.GetString(reader.GetOrdinal("productname")),
+                Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
+                Type = reader.IsDBNull(reader.GetOrdinal("type")) ? null : reader.GetString(reader.GetOrdinal("type")),
+                ShortDescription = reader.IsDBNull(reader.GetOrdinal("shortdescription")) ? null : reader.GetString(reader.GetOrdinal("shortdescription")),
+                Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
+                SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
+                BrandId = reader.IsDBNull(reader.GetOrdinal("brandid")) ? null : reader.GetInt32(reader.GetOrdinal("brandid")),
+                CategoryId = reader.IsDBNull(reader.GetOrdinal("categoryid")) ? null : reader.GetInt32(reader.GetOrdinal("categoryid")),
+
+                BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
+                MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
+                DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice")) ? null : reader.GetDecimal(reader.GetOrdinal("discountprice")),
+                SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
+                GST = reader.GetDecimal(reader.GetOrdinal("gst")),
+                Stock = reader.GetInt32(reader.GetOrdinal("stock")),
+
+                ProductImageUrl = reader.IsDBNull(reader.GetOrdinal("productimageurl")) ? null : reader.GetString(reader.GetOrdinal("productimageurl")),
+                Color = reader.IsDBNull(reader.GetOrdinal("color")) ? null : reader.GetString(reader.GetOrdinal("color")),
+
+                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("createdat")),
+                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updatedat"))
+            };
+
+            if (!reader.IsDBNull(reader.GetOrdinal("galleryimages")))
+                product.GalleryImages = reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages"));
+
+            if (!reader.IsDBNull(reader.GetOrdinal("sizes")))
+                product.Sizes = reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes"));
+
+            return product;
+        }
     }
 }
