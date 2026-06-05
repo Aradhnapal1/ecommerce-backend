@@ -99,6 +99,7 @@ CREATE TABLE products (
     id SERIAL PRIMARY KEY,
 
     productname VARCHAR(255) NOT NULL,
+        slug VARCHAR(255) UNIQUE NOT NULL,
     shortdescription VARCHAR(500),
     description TEXT,
 
@@ -153,4 +154,43 @@ CREATE TABLE banners (
     active BOOLEAN DEFAULT TRUE,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE product_variants (
+    id SERIAL PRIMARY KEY,
+
+    productid INT NOT NULL,
+
+    sku VARCHAR(100),
+
+    sizes TEXT[],
+
+    color VARCHAR(100),
+
+    mrp NUMERIC(10,2),
+
+    discountpercent NUMERIC(5,2) DEFAULT 0,
+
+    baseprice NUMERIC(10,2),
+
+    gst NUMERIC(5,2) DEFAULT 0,
+
+    saleprice NUMERIC(10,2),
+
+    stock INT DEFAULT 0,
+
+    variantimageurl TEXT,
+
+    galleryimages TEXT[],
+
+    isactive BOOLEAN DEFAULT TRUE,
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_product_variant_product
+        FOREIGN KEY (productid)
+        REFERENCES products(id)
+        ON DELETE CASCADE
 );

@@ -151,6 +151,7 @@ namespace Ecommerce_Backend.Models
         public int Id { get; set; }
 
         public string ProductName { get; set; }
+        public string? Slug { get; set; }
         public string? ShortDescription { get; set; }
         public string? Description { get; set; }
 
@@ -195,6 +196,46 @@ namespace Ecommerce_Backend.Models
         public IFormFile? BannerFile { get; set; }
         public bool Status { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+
+
+    public class ProductVariantModel
+    {
+        public int Id { get; set; }
+
+        public int ProductId { get; set; }
+        public string? VariantName { get; set; }
+
+        public string? SKU { get; set; }
+
+        public string[]? Sizes { get; set; }
+
+        public string? Color { get; set; }
+
+        public decimal? MRP { get; set; }
+
+        public decimal? DiscountPercent { get; set; }
+        public decimal GST { get; set; }
+
+        public decimal? BasePrice { get; set; }
+
+        public decimal? SalePrice { get; set; }
+
+        public int Stock { get; set; }
+
+        public string? VariantImageUrl { get; set; }
+
+        public string[]? GalleryImages { get; set; }
+
+        public IFormFile? VariantImage { get; set; }
+
+        public List<IFormFile>? GalleryFiles { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public DateTime UpdatedAt { get; set; }
     }
 
 }

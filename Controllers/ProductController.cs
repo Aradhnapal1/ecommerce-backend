@@ -34,5 +34,20 @@ namespace Ecommerce_Backend.Controllers
             return Ok(result);
         }
 
+        [HttpPut("updateproduct/{id}")]
+        public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
+        {
+            var result = await _businessLayer.UpdateProduct(id, product);
+            return Ok(result);
+        }
+
+
+        [HttpDelete("deleteproduct/{id}")]
+        public async Task<IActionResult> DeleteProduct(int id)
+        {
+            var result = await _businessLayer.DeleteProduct(id);
+            return Ok(result);
+        }
+
     }
 }
