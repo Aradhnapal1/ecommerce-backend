@@ -8,6 +8,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<object> AddVariant([FromForm] ProductVariantModel variant);
         Task<object> UpdateVariant(int id, [FromForm] ProductVariantModel variant);
         Task<object> DeleteVariant(int id);
+        Task<object> GetVariantById(int id);
     }
     public partial class BusinessLayer : IBusinessLayer
     {
@@ -30,6 +31,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<object> DeleteVariant(int id)
         {
             return await _databaseLayer.DeleteVariant(id);
+        }
+
+        public async Task<object> GetVariantById(int id)
+        {
+            return await _databaseLayer.GetVariantById(id);
         }
     }
 

@@ -12,6 +12,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<object> AddVariant([FromForm] ProductVariantModel variant);
         Task<object> UpdateVariant(int id, ProductVariantModel variant);
         Task<object> DeleteVariant(int id);
+        Task<object> GetVariantById(int id);
     }
     public partial class DataBaseLayer : IDatabaseLayer
     {
@@ -504,5 +505,49 @@ WHERE id = @Id";
                 };
             }
         }
+
+
+
+
+
+        public async Task<object> GetVariantById(int id)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            var query = "SELECT * FROM product_variants WHERE id = @id";
+
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("id", id);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync())
+                return null;
+
+            var variant = new ProductVariantModel
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("id")),
+                ProductId = reader.GetInt32(reader.GetOrdinal("productid")),
+                VariantName = reader.IsDBNull(reader.GetOrdinal("variantname")) ? null : reader.GetString(reader.GetOrdinal("variantname")),
+                Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
+                SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
+                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes")) ? null : reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes")),
+                Color = reader.IsDBNull(reader.GetOrdinal("color")) ? null : reader.GetString(reader.GetOrdinal("color")),
+                MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
+                DiscountPercent = reader.GetDecimal(reader.GetOrdinal("discountpercent")),
+                BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
+                SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
+                GST = reader.GetDecimal(reader.GetOrdinal("gst")),
+                Stock = reader.GetInt32(reader.GetOrdinal("stock")),
+                VariantImageUrl = reader.IsDBNull(reader.GetOrdinal("variantimageurl")) ? null : reader.GetString(reader.GetOrdinal("variantimageurl")),
+                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages")) ? null : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
+                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive"))
+            };
+
+            return variant;
+        }
+
+
     }
 }

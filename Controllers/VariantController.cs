@@ -104,5 +104,30 @@ namespace Ecommerce_Backend.Controllers
 
             return Ok(result);
         }
+
+
+
+        [HttpGet("getvariantbyid/{id}")]
+        public async Task<IActionResult> GetVariantById(int id)
+        {
+            try
+            {
+                var data = await _businessLayer.GetVariantById(id);
+
+                return Ok(new
+                {
+                    status = true,
+                    data = data
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
     }
 }
