@@ -152,6 +152,7 @@ namespace Ecommerce_Backend.Models
 
         public string ProductName { get; set; }
         public string? Slug { get; set; }
+        public string? Type { get; set; }
         public string? ShortDescription { get; set; }
         public string? Description { get; set; }
 

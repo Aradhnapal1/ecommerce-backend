@@ -38,6 +38,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     Slug = reader.IsDBNull(reader.GetOrdinal("slug"))
                         ? null
                         : reader.GetString(reader.GetOrdinal("slug")),
+                    Type = reader.IsDBNull(reader.GetOrdinal("type"))
+                        ? null
+                        : reader.GetString(reader.GetOrdinal("type")),
 
                     ShortDescription = reader.IsDBNull(reader.GetOrdinal("shortdescription"))
                         ? null
@@ -255,11 +258,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 // =========================
                 var query = @"
 INSERT INTO products 
-(productname, slug, shortdescription, description, sku, brandid, categoryid,
+(productname, slug,type, shortdescription, description, sku, brandid, categoryid,
  baseprice, mrp, discountprice, saleprice, gst, stock,
  productimageurl, galleryimages, sizes, color, isactive, createdat, updatedat)
 VALUES 
-(@ProductName, @Slug, @ShortDescription, @Description, @SKU, @BrandId, @CategoryId,
+(@ProductName, @Slug, @Type, @ShortDescription, @Description, @SKU, @BrandId, @CategoryId,
  @BasePrice, @MRP, @DiscountPrice, @SalePrice, @GST, @Stock,
  @ProductImageUrl, @GalleryImages::text[], @Sizes::text[], @Color, @IsActive, NOW(), NOW())";
 
@@ -267,6 +270,7 @@ VALUES
 
                 cmd.Parameters.AddWithValue("ProductName", product.ProductName);
                 cmd.Parameters.AddWithValue("Slug", slug);
+                cmd.Parameters.AddWithValue("Type", (object?)product.Type ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("ShortDescription", (object?)product.ShortDescription ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Description", (object?)product.Description ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("SKU", (object?)product.SKU ?? DBNull.Value);
