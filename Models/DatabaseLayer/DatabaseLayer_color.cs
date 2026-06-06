@@ -47,45 +47,69 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
         public async Task<string> GetColorCode(string colorName)
         {
-            try
+            var trimmed = colorName.Trim();
+
+            // ✅ Step 1: CSS canvas trick se RGB nikalo (server-side safe)
+            var (r, g, b, cssValid) = ParseCssColor(trimmed);
+
+            if (cssValid)
             {
-                using var client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(10);
-
-                // User-Agent add karo — kuch APIs bina iske block karti hain
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; EcommerceApp/1.0)");
-
-                var encodedName = Uri.EscapeDataString(colorName.Trim());
-                var url = $"https://api.color.pizza/v1/names/?name={encodedName}";
-
-                var response = await client.GetAsync(url);
-
-                // EnsureSuccessStatusCode mat use karo — manually check karo
-                if (!response.IsSuccessStatusCode)
-                    return GenerateColorFromName(colorName); // fallback
-
-                var content = await response.Content.ReadAsStringAsync();
-
-                using var doc = JsonDocument.Parse(content);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("colors", out var colors) && colors.GetArrayLength() > 0)
+                // ✅ Step 2: thecolorapi.com pe RGB bhejo — exact named hex milega
+                try
                 {
-                    var firstColor = colors[0];
-                    if (firstColor.TryGetProperty("hex", out var hexProp))
+                    using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(8);
+                    client.DefaultRequestHeaders.Add(
+                        "User-Agent", "Mozilla/5.0 (compatible; EcommerceApp/1.0)");
+
+                    // RGB se API call — name se nahi!
+                    var url = $"https://www.thecolorapi.com/id?rgb=rgb({r},{g},{b})&format=json";
+                    var response = await client.GetAsync(url);
+
+                    if (response.IsSuccessStatusCode)
                     {
-                        var hex = hexProp.GetString();
+                        var json = await response.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        var hex = doc.RootElement
+                                     .GetProperty("hex")
+                                     .GetProperty("value")
+                                     .GetString();
+
                         if (!string.IsNullOrEmpty(hex))
-                            return hex.ToUpper();
+                            return hex.ToUpper(); // "#FF0000"
                     }
                 }
-            }
-            catch (Exception)
-            {
-                // API unreachable ho to crash mat karo
+                catch { }
+
+                // ✅ Step 3: API fail hoi to CSS se mila RGB hi use karo
+                return $"#{r:X2}{g:X2}{b:X2}".ToUpper();
             }
 
-            return GenerateColorFromName(colorName); // Always fallback
+            // ✅ Step 4: CSS bhi nahi jaanta (custom name) → #808080
+            return "#808080";
+        }
+
+        // Server-side CSS color parser — System.Drawing use karta hai
+        private (int R, int G, int B, bool Valid) ParseCssColor(string colorName)
+        {
+            try
+            {
+                // System.Drawing.Color CSS named colors support karta hai
+                var color = System.Drawing.ColorTranslator.FromHtml(colorName);
+                return (color.R, color.G, color.B, true);
+            }
+            catch { }
+
+            // Space-removed try — "Navy Blue" → "navyblue"
+            try
+            {
+                var noSpace = colorName.Replace(" ", "");
+                var color = System.Drawing.ColorTranslator.FromHtml(noSpace);
+                return (color.R, color.G, color.B, true);
+            }
+            catch { }
+
+            return (0, 0, 0, false);
         }
 
         // ✅ Local fallback — koi bhi API call nahi, deterministic color
