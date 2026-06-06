@@ -47,77 +47,129 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
         public async Task<string> GetColorCode(string colorName)
         {
-            using var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
+            var trimmed = colorName.Trim();
 
-            // color.pizza API — FREE, no API key, name se hex deta hai
-            var encodedName = Uri.EscapeDataString(colorName.Trim());
-            var url = $"https://api.color.pizza/v1/names/?name={encodedName}";
+            // ✅ Step 1: CSS canvas trick se RGB nikalo (server-side safe)
+            var (r, g, b, cssValid) = ParseCssColor(trimmed);
 
-            var response = await client.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
-
-            using var doc = JsonDocument.Parse(content);
-            var root = doc.RootElement;
-
-            // "colors" array ka pehla result lo (highest similarity)
-            if (root.TryGetProperty("colors", out var colors) && colors.GetArrayLength() > 0)
+            if (cssValid)
             {
-                var firstColor = colors[0];
-                if (firstColor.TryGetProperty("hex", out var hexProp))
+                // ✅ Step 2: thecolorapi.com pe RGB bhejo — exact named hex milega
+                try
                 {
-                    var hex = hexProp.GetString();
-                    if (!string.IsNullOrEmpty(hex))
-                        return hex.ToUpper(); // e.g. "#4169E1"
+                    using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(8);
+                    client.DefaultRequestHeaders.Add(
+                        "User-Agent", "Mozilla/5.0 (compatible; EcommerceApp/1.0)");
+
+                    // RGB se API call — name se nahi!
+                    var url = $"https://www.thecolorapi.com/id?rgb=rgb({r},{g},{b})&format=json";
+                    var response = await client.GetAsync(url);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        var hex = doc.RootElement
+                                     .GetProperty("hex")
+                                     .GetProperty("value")
+                                     .GetString();
+
+                        if (!string.IsNullOrEmpty(hex))
+                            return hex.ToUpper(); // "#FF0000"
+                    }
                 }
+                catch { }
+
+                // ✅ Step 3: API fail hoi to CSS se mila RGB hi use karo
+                return $"#{r:X2}{g:X2}{b:X2}".ToUpper();
             }
 
+            // ✅ Step 4: CSS bhi nahi jaanta (custom name) → #808080
             return "#808080";
         }
 
-        public async Task<ColorResponse> CreateColor(ColorResponse color)
+        // Server-side CSS color parser — System.Drawing use karta hai
+        private (int R, int G, int B, bool Valid) ParseCssColor(string colorName)
         {
-            using var con = new NpgsqlConnection(DbConnection);
-            await con.OpenAsync();
-
-            // Duplicate check
-            using (var checkCmd = new NpgsqlCommand(
-                "SELECT COUNT(*) FROM colors WHERE LOWER(color_name)=LOWER(@color_name)", con))
+            try
             {
-                checkCmd.Parameters.AddWithValue("@color_name", color.ColorName);
-                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-                if (count > 0)
-                    throw new Exception("Color already exists.");
+                // System.Drawing.Color CSS named colors support karta hai
+                var color = System.Drawing.ColorTranslator.FromHtml(colorName);
+                return (color.R, color.G, color.B, true);
             }
+            catch { }
 
-            // Dynamic color code — API se aa raha hai
-            string colorCode = await GetColorCode(color.ColorName);
-
-            using var cmd = new NpgsqlCommand(@"
-        INSERT INTO colors (color_name, color_code, status)
-        VALUES (@color_name, @color_code, @status)
-        RETURNING id, created_at;
-    ", con);
-
-            cmd.Parameters.AddWithValue("@color_name", color.ColorName);
-            cmd.Parameters.AddWithValue("@color_code", colorCode);
-            cmd.Parameters.AddWithValue("@status", color.Status);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (!await reader.ReadAsync())
-                throw new Exception("Failed to create color.");
-
-            return new ColorResponse
+            // Space-removed try — "Navy Blue" → "navyblue"
+            try
             {
-                Id = reader.GetInt32(0),
-                ColorName = color.ColorName,
-                ColorCode = colorCode,
-                Status = color.Status,
-                CreatedAt = reader.GetDateTime(1)
-            };
+                var noSpace = colorName.Replace(" ", "");
+                var color = System.Drawing.ColorTranslator.FromHtml(noSpace);
+                return (color.R, color.G, color.B, true);
+            }
+            catch { }
+
+            return (0, 0, 0, false);
         }
+
+        // ✅ Local fallback — koi bhi API call nahi, deterministic color
+        private string GenerateColorFromName(string colorName)
+        {
+            // Name se consistent hex generate karo
+            int hash = colorName.ToLower().Aggregate(0, (h, c) => h * 31 + c);
+            int r = (hash >> 16) & 0xFF;
+            int g = (hash >> 8) & 0xFF;
+            int b = hash & 0xFF;
+
+            // Too dark/light avoid karo
+            r = Math.Clamp(r, 80, 220);
+            g = Math.Clamp(g, 80, 220);
+            b = Math.Clamp(b, 80, 220);
+
+            return $"#{r:X2}{g:X2}{b:X2}";
+        }
+
+        public async Task<ColorResponse> CreateColor(ColorResponse color)
+                {
+                    using var con = new NpgsqlConnection(DbConnection);
+                    await con.OpenAsync();
+
+                    // Duplicate check
+                    using (var checkCmd = new NpgsqlCommand(
+                        "SELECT COUNT(*) FROM colors WHERE LOWER(color_name)=LOWER(@color_name)", con))
+                    {
+                        checkCmd.Parameters.AddWithValue("@color_name", color.ColorName);
+                        var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+                        if (count > 0)
+                            throw new Exception("Color already exists.");
+                    }
+
+                    // Dynamic color code — API se aa raha hai
+                    string colorCode = await GetColorCode(color.ColorName);
+
+                    using var cmd = new NpgsqlCommand(@"
+                INSERT INTO colors (color_name, color_code, status)
+                VALUES (@color_name, @color_code, @status)
+                RETURNING id, created_at;
+            ", con);
+
+                    cmd.Parameters.AddWithValue("@color_name", color.ColorName);
+                    cmd.Parameters.AddWithValue("@color_code", colorCode);
+                    cmd.Parameters.AddWithValue("@status", color.Status);
+
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    if (!await reader.ReadAsync())
+                        throw new Exception("Failed to create color.");
+
+                    return new ColorResponse
+                    {
+                        Id = reader.GetInt32(0),
+                        ColorName = color.ColorName,
+                        ColorCode = colorCode,
+                        Status = color.Status,
+                        CreatedAt = reader.GetDateTime(1)
+                    };
+                }
 
         public async Task<ColorResponse> UpdateColor(int id, ColorResponse color)
         {
