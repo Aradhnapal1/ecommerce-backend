@@ -47,34 +47,59 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
         public async Task<string> GetColorCode(string colorName)
         {
-            using var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
-
-            // color.pizza API — FREE, no API key, name se hex deta hai
-            var encodedName = Uri.EscapeDataString(colorName.Trim());
-            var url = $"https://api.color.pizza/v1/names/?name={encodedName}";
-
-            var response = await client.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
-
-            using var doc = JsonDocument.Parse(content);
-            var root = doc.RootElement;
-
-            // "colors" array ka pehla result lo (highest similarity)
-            if (root.TryGetProperty("colors", out var colors) && colors.GetArrayLength() > 0)
+            try
             {
-                var firstColor = colors[0];
-                if (firstColor.TryGetProperty("hex", out var hexProp))
-                {
-                    var hex = hexProp.GetString();
-                    if (!string.IsNullOrEmpty(hex))
-                        return hex.ToUpper(); // e.g. "#4169E1"
-                }
-            }
+                using var client = new HttpClient();
 
-            return "#808080";
+                client.Timeout =
+                    TimeSpan.FromSeconds(10);
+
+                var encodedName =
+                    Uri.EscapeDataString(
+                        colorName.Trim()
+                    );
+
+                var url =
+                    $"https://api.color.pizza/v1/names/?name={encodedName}";
+
+                var response =
+                    await client.GetAsync(url);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return "#808080";
+                }
+
+                var content =
+                    await response.Content.ReadAsStringAsync();
+
+                using var doc =
+                    JsonDocument.Parse(content);
+
+                var root =
+                    doc.RootElement;
+
+                if (
+                    root.TryGetProperty(
+                        "colors",
+                        out var colors
+                    ) &&
+                    colors.GetArrayLength() > 0
+                )
+                {
+                    return colors[0]
+                        .GetProperty("hex")
+                        .GetString()
+                        ?.ToUpper()
+                        ?? "#808080";
+                }
+
+                return "#808080";
+            }
+            catch
+            {
+                return "#808080";
+            }
         }
 
         public async Task<ColorResponse> CreateColor(ColorResponse color)
