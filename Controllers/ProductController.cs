@@ -30,9 +30,45 @@ namespace Ecommerce_Backend.Controllers
         [HttpPost("addproduct")]
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
         {
-           var result = await _businessLayer.AddProduct(product);
+            var result = await _businessLayer.AddProduct(product);
             return Ok(result);
         }
 
+        [HttpPut("updateproduct/{id}")]
+        public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
+        {
+            var result = await _businessLayer.UpdateProduct(id, product);
+            return Ok(result);
+        }
+
+
+        [HttpDelete("deleteproduct/{id}")]
+        public async Task<IActionResult> DeleteProduct(int id)
+        {
+            var result = await _businessLayer.DeleteProduct(id);
+            return Ok(result);
+        }
+
+
+        [HttpGet("getproductbyid/{id}")]
+        public async Task<IActionResult> GetProductById(int id)
+        {
+            var result = await _businessLayer.GetProductById(id);
+
+            if (result == null)
+            {
+                return NotFound(new
+                {
+                    status = false,
+                    message = "Product not found"
+                });
+            }
+
+            return Ok(new
+            {
+                status = true,
+                data = result
+            });
+        }
     }
 }
