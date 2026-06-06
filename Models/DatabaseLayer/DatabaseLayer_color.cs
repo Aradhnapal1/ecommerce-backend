@@ -50,99 +50,102 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             try
             {
                 using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(10);
 
-                client.Timeout =
-                    TimeSpan.FromSeconds(10);
+                // User-Agent add karo — kuch APIs bina iske block karti hain
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; EcommerceApp/1.0)");
 
-                var encodedName =
-                    Uri.EscapeDataString(
-                        colorName.Trim()
-                    );
+                var encodedName = Uri.EscapeDataString(colorName.Trim());
+                var url = $"https://api.color.pizza/v1/names/?name={encodedName}";
 
-                var url =
-                    $"https://api.color.pizza/v1/names/?name={encodedName}";
+                var response = await client.GetAsync(url);
 
-                var response =
-                    await client.GetAsync(url);
-
+                // EnsureSuccessStatusCode mat use karo — manually check karo
                 if (!response.IsSuccessStatusCode)
+                    return GenerateColorFromName(colorName); // fallback
+
+                var content = await response.Content.ReadAsStringAsync();
+
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("colors", out var colors) && colors.GetArrayLength() > 0)
                 {
-                    return "#808080";
+                    var firstColor = colors[0];
+                    if (firstColor.TryGetProperty("hex", out var hexProp))
+                    {
+                        var hex = hexProp.GetString();
+                        if (!string.IsNullOrEmpty(hex))
+                            return hex.ToUpper();
+                    }
                 }
-
-                var content =
-                    await response.Content.ReadAsStringAsync();
-
-                using var doc =
-                    JsonDocument.Parse(content);
-
-                var root =
-                    doc.RootElement;
-
-                if (
-                    root.TryGetProperty(
-                        "colors",
-                        out var colors
-                    ) &&
-                    colors.GetArrayLength() > 0
-                )
-                {
-                    return colors[0]
-                        .GetProperty("hex")
-                        .GetString()
-                        ?.ToUpper()
-                        ?? "#808080";
-                }
-
-                return "#808080";
             }
-            catch
+            catch (Exception)
             {
-                return "#808080";
+                // API unreachable ho to crash mat karo
             }
+
+            return GenerateColorFromName(colorName); // Always fallback
+        }
+
+        // ✅ Local fallback — koi bhi API call nahi, deterministic color
+        private string GenerateColorFromName(string colorName)
+        {
+            // Name se consistent hex generate karo
+            int hash = colorName.ToLower().Aggregate(0, (h, c) => h * 31 + c);
+            int r = (hash >> 16) & 0xFF;
+            int g = (hash >> 8) & 0xFF;
+            int b = hash & 0xFF;
+
+            // Too dark/light avoid karo
+            r = Math.Clamp(r, 80, 220);
+            g = Math.Clamp(g, 80, 220);
+            b = Math.Clamp(b, 80, 220);
+
+            return $"#{r:X2}{g:X2}{b:X2}";
         }
 
         public async Task<ColorResponse> CreateColor(ColorResponse color)
-        {
-            using var con = new NpgsqlConnection(DbConnection);
-            await con.OpenAsync();
+                {
+                    using var con = new NpgsqlConnection(DbConnection);
+                    await con.OpenAsync();
 
-            // Duplicate check
-            using (var checkCmd = new NpgsqlCommand(
-                "SELECT COUNT(*) FROM colors WHERE LOWER(color_name)=LOWER(@color_name)", con))
-            {
-                checkCmd.Parameters.AddWithValue("@color_name", color.ColorName);
-                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-                if (count > 0)
-                    throw new Exception("Color already exists.");
-            }
+                    // Duplicate check
+                    using (var checkCmd = new NpgsqlCommand(
+                        "SELECT COUNT(*) FROM colors WHERE LOWER(color_name)=LOWER(@color_name)", con))
+                    {
+                        checkCmd.Parameters.AddWithValue("@color_name", color.ColorName);
+                        var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+                        if (count > 0)
+                            throw new Exception("Color already exists.");
+                    }
 
-            // Dynamic color code — API se aa raha hai
-            string colorCode = await GetColorCode(color.ColorName);
+                    // Dynamic color code — API se aa raha hai
+                    string colorCode = await GetColorCode(color.ColorName);
 
-            using var cmd = new NpgsqlCommand(@"
-        INSERT INTO colors (color_name, color_code, status)
-        VALUES (@color_name, @color_code, @status)
-        RETURNING id, created_at;
-    ", con);
+                    using var cmd = new NpgsqlCommand(@"
+                INSERT INTO colors (color_name, color_code, status)
+                VALUES (@color_name, @color_code, @status)
+                RETURNING id, created_at;
+            ", con);
 
-            cmd.Parameters.AddWithValue("@color_name", color.ColorName);
-            cmd.Parameters.AddWithValue("@color_code", colorCode);
-            cmd.Parameters.AddWithValue("@status", color.Status);
+                    cmd.Parameters.AddWithValue("@color_name", color.ColorName);
+                    cmd.Parameters.AddWithValue("@color_code", colorCode);
+                    cmd.Parameters.AddWithValue("@status", color.Status);
 
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (!await reader.ReadAsync())
-                throw new Exception("Failed to create color.");
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    if (!await reader.ReadAsync())
+                        throw new Exception("Failed to create color.");
 
-            return new ColorResponse
-            {
-                Id = reader.GetInt32(0),
-                ColorName = color.ColorName,
-                ColorCode = colorCode,
-                Status = color.Status,
-                CreatedAt = reader.GetDateTime(1)
-            };
-        }
+                    return new ColorResponse
+                    {
+                        Id = reader.GetInt32(0),
+                        ColorName = color.ColorName,
+                        ColorCode = colorCode,
+                        Status = color.Status,
+                        CreatedAt = reader.GetDateTime(1)
+                    };
+                }
 
         public async Task<ColorResponse> UpdateColor(int id, ColorResponse color)
         {
