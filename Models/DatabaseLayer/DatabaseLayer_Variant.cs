@@ -350,17 +350,34 @@ RETURNING id";
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
+                // ================= CHECK EXISTS =================
+                using (var checkCmd = new NpgsqlCommand(
+                    "SELECT COUNT(*) FROM product_variants WHERE id = @id", con))
+                {
+                    checkCmd.Parameters.AddWithValue("id", id);
+
+                    var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+                    if (exists == 0)
+                    {
+                        return new
+                        {
+                            status = false,
+                            message = "Variant not found"
+                        };
+                    }
+                }
+
                 // ================= GET OLD IMAGE =================
                 string oldImageUrl = null;
 
-                var getQuery = "SELECT variantimageurl FROM product_variants WHERE id = @id";
-
-                using (var getCmd = new NpgsqlCommand(getQuery, con))
+                using (var getCmd = new NpgsqlCommand(
+                    "SELECT variantimageurl FROM product_variants WHERE id = @id", con))
                 {
                     getCmd.Parameters.AddWithValue("id", id);
 
                     var result = await getCmd.ExecuteScalarAsync();
-                    oldImageUrl = result == DBNull.Value ? null : result?.ToString();
+                    oldImageUrl = result?.ToString();
                 }
 
                 // ================= CLOUDINARY =================
@@ -374,9 +391,35 @@ RETURNING id";
 
                 string newImageUrl = oldImageUrl;
 
-                // ================= IMAGE REPLACE =================
+                // ================= DELETE OLD + UPLOAD NEW IMAGE =================
                 if (variant.VariantImage != null && variant.VariantImage.Length > 0)
                 {
+                    // 🔥 DELETE OLD IMAGE
+                    if (!string.IsNullOrEmpty(oldImageUrl))
+                    {
+                        try
+                        {
+                            var uri = new Uri(oldImageUrl);
+
+                            var parts = uri.AbsolutePath.Split("/upload/");
+                            if (parts.Length > 1)
+                            {
+                                var publicId = parts[1];
+
+                                publicId = Regex.Replace(publicId, @"^v\d+\/", "");
+
+                                await cloudinary.DestroyAsync(
+                                    new DeletionParams(publicId)
+                                );
+                            }
+                        }
+                        catch
+                        {
+                            // ignore delete error
+                        }
+                    }
+
+                    // 🔥 UPLOAD NEW IMAGE
                     using var stream = variant.VariantImage.OpenReadStream();
 
                     var uploadParams = new ImageUploadParams
@@ -388,43 +431,53 @@ RETURNING id";
                     var uploadResult = await cloudinary.UploadAsync(uploadParams);
 
                     if (uploadResult.Error != null)
-                        throw new Exception(uploadResult.Error.Message);
+                    {
+                        return new
+                        {
+                            status = false,
+                            message = uploadResult.Error.Message
+                        };
+                    }
 
                     newImageUrl = uploadResult.SecureUrl.ToString();
                 }
 
-                // ================= PRICE CALC =================
+                // ================= PRICE CALCULATION =================
                 decimal mrp = variant.MRP ?? 0;
                 decimal discountPercent = variant.DiscountPercent ?? 0;
                 decimal gstPercent = variant.GST;
 
                 decimal discountAmount = (mrp * discountPercent) / 100;
                 decimal basePrice = mrp - discountAmount;
-
                 if (basePrice < 0) basePrice = 0;
 
                 decimal gstAmount = (basePrice * gstPercent) / 100;
                 decimal salePrice = basePrice + gstAmount;
 
+                // ================= FIX SIZES =================
+                int[] sizesArray =
+                    variant.Sizes != null && variant.Sizes.Length > 0
+                    ? variant.Sizes
+                    : Array.Empty<int>();
+
                 // ================= UPDATE QUERY =================
                 var query = @"
 UPDATE product_variants
 SET
-productid = @ProductId,
-variantname = @VariantName,
-slug = @Slug,
-sku = @SKU,
-sizes = @Sizes,
-color = @Color,
-mrp = @MRP,
-discountpercent = @DiscountPercent,
-baseprice = @BasePrice,
-saleprice = @SalePrice,
-gst = @GST,
-stock = @Stock,
-variantimageurl = @VariantImageUrl,
-isactive = @IsActive,
-updatedat = NOW()
+    productid = @ProductId,
+    variantname = @VariantName,
+    sku = @SKU,
+    sizes = @Sizes,
+    color = @Color,
+    mrp = @MRP,
+    discountpercent = @DiscountPercent,
+    baseprice = @BasePrice,
+    saleprice = @SalePrice,
+    gst = @GST,
+    stock = @Stock,
+    variantimageurl = @VariantImageUrl,
+    isactive = @IsActive,
+    updatedat = NOW()
 WHERE id = @Id";
 
                 using var cmd = new NpgsqlCommand(query, con);
@@ -433,8 +486,8 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("ProductId", variant.ProductId);
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("Sizes", (object?)variant.Sizes ?? DBNull.Value);
+
+                cmd.Parameters.AddWithValue("Sizes", sizesArray);
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("MRP", mrp);
@@ -444,26 +497,19 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("GST", gstPercent);
                 cmd.Parameters.AddWithValue("Stock", variant.Stock);
 
-                cmd.Parameters.AddWithValue("VariantImageUrl",
-                    string.IsNullOrEmpty(newImageUrl) ? DBNull.Value : newImageUrl);
+                cmd.Parameters.AddWithValue(
+                    "VariantImageUrl",
+                    string.IsNullOrEmpty(newImageUrl) ? DBNull.Value : newImageUrl
+                );
 
                 cmd.Parameters.AddWithValue("IsActive", variant.IsActive);
 
                 var rows = await cmd.ExecuteNonQueryAsync();
 
-                if (rows == 0)
-                {
-                    return new
-                    {
-                        status = false,
-                        message = "Variant not found"
-                    };
-                }
-
                 return new
                 {
-                    status = true,
-                    message = "Variant updated successfully",
+                    status = rows > 0,
+                    message = rows > 0 ? "Variant updated successfully" : "Variant not found",
                     updatedImage = newImageUrl,
                     basePrice,
                     salePrice
