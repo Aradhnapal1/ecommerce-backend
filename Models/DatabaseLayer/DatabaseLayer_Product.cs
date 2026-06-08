@@ -25,34 +25,26 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             await con.OpenAsync();
 
             var query = @"
-    SELECT
-        p.*,
-        b.brand_name,
-        c.category_name,
-        col.color_name,
+SELECT
+    p.*,
+    b.brand_name,
+    c.category_name,
+    col.color_name,
 
-        (
-            SELECT ARRAY_AGG(s.size_name)
-            FROM sizes s
-            WHERE s.id = ANY(
-                ARRAY(
-                    SELECT UNNEST(p.sizes)::INT
-                )
-            )
-        ) AS size_names
+    (
+        SELECT ARRAY_AGG(s.size_name)
+        FROM sizes s
+        WHERE s.id = ANY(p.sizes)
+    ) AS size_names
 
-    FROM products p
+FROM products p
 
-    LEFT JOIN brands b
-        ON b.id = p.brandid
+LEFT JOIN brands b ON b.id = p.brandid
+LEFT JOIN categories c ON c.id = p.categoryid
+LEFT JOIN colors col ON col.id = p.color::INT
 
-    LEFT JOIN categories c
-        ON c.id = p.categoryid
-
-    LEFT JOIN colors col
-        ON col.id = CAST(p.color AS INT)
-
-    ORDER BY p.id DESC";
+ORDER BY p.id DESC;
+";
 
             using var cmd = new NpgsqlCommand(query, con);
             using var reader = await cmd.ExecuteReaderAsync();
@@ -62,17 +54,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 var product = new ProductModel
                 {
                     Id = reader.GetInt32(reader.GetOrdinal("id")),
-
                     ProductName = reader["productname"]?.ToString(),
-
                     Slug = reader["slug"]?.ToString(),
-
                     Type = reader["type"]?.ToString(),
-
                     ShortDescription = reader["shortdescription"]?.ToString(),
-
                     Description = reader["description"]?.ToString(),
-
                     SKU = reader["sku"]?.ToString(),
 
                     BrandId = reader.IsDBNull(reader.GetOrdinal("brandid"))
@@ -110,12 +96,13 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     ProductImageUrl = reader["productimageurl"]?.ToString(),
 
                     GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
-                        ? null
+                        ? Array.Empty<string>()
                         : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
 
+                    // ✅ FIXED: INT[] SAFE READ
                     Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
-                        ? null
-                        : reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes")),
+                        ? Array.Empty<int>()
+                        : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
 
                     Color = reader["color"]?.ToString(),
 
@@ -131,18 +118,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         ? DateTime.MinValue
                         : reader.GetDateTime(reader.GetOrdinal("updatedat")),
 
-                    // Joined values
-                    BrandName = reader.IsDBNull(reader.GetOrdinal("brand_name"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("brand_name")),
-
-                    CategoryName = reader.IsDBNull(reader.GetOrdinal("category_name"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("category_name")),
-
-                    ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("color_name")),
+                    BrandName = reader["brand_name"]?.ToString(),
+                    CategoryName = reader["category_name"]?.ToString(),
+                    ColorName = reader["color_name"]?.ToString(),
 
                     SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
                         ? new List<string>()
@@ -154,7 +132,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
             return products;
         }
-
 
 
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
@@ -173,9 +150,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                // =========================
-                // CLOUDINARY SETUP
-                // =========================
+                // ================= CLOUDINARY =================
                 var account = new Account(
                     _configuration["CloudinarySettings:CloudName"],
                     _configuration["CloudinarySettings:ApiKey"],
@@ -184,15 +159,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                 var cloudinary = new Cloudinary(account);
 
-
-
-                // =========================
-                // SLUG GENERATION
-                // =========================
+                // ================= SLUG =================
                 string GenerateSlug(string text)
                 {
-                    if (string.IsNullOrWhiteSpace(text))
-                        return "";
+                    if (string.IsNullOrWhiteSpace(text)) return "";
 
                     text = text.ToLower().Trim();
                     text = Regex.Replace(text, @"[^a-z0-9\s-]", "");
@@ -210,23 +180,19 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 while (true)
                 {
                     using var checkCmd = new NpgsqlCommand(
-                        "SELECT COUNT(*) FROM products WHERE slug = @Slug",
-                        con);
+                        "SELECT COUNT(*) FROM products WHERE slug = @Slug", con);
 
                     checkCmd.Parameters.AddWithValue("Slug", slug);
 
                     var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
 
-                    if (count == 0)
-                        break;
+                    if (count == 0) break;
 
                     slug = $"{originalSlug}-{counter}";
                     counter++;
                 }
 
-                // =========================
-                // MAIN IMAGE UPLOAD
-                // =========================
+                // ================= MAIN IMAGE =================
                 string productImageUrl = null;
 
                 if (product.ProductImage != null && product.ProductImage.Length > 0)
@@ -257,13 +223,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     return new BadRequestObjectResult(new
                     {
                         status = false,
-                        message = "ProductImage is required (Postman key: ProductImage)"
+                        message = "Product image is required"
                     });
                 }
 
-                // =========================
-                // GALLERY IMAGES UPLOAD
-                // =========================
+                // ================= GALLERY =================
                 List<string> galleryUrls = new();
 
                 if (product.GalleryFiles != null && product.GalleryFiles.Count > 0)
@@ -282,22 +246,18 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                         var uploadResult = await cloudinary.UploadAsync(uploadParams);
 
-                        if (uploadResult?.Error == null && uploadResult?.SecureUrl != null)
+                        if (uploadResult?.SecureUrl != null)
                         {
                             galleryUrls.Add(uploadResult.SecureUrl.ToString());
                         }
                     }
                 }
 
-                // =========================
-                // DISCOUNT % LOGIC
-                // =========================
+                // ================= PRICE CALC =================
                 decimal discountPercent = product.DiscountPrice ?? 0;
-
                 decimal discountAmount = (product.MRP * discountPercent) / 100;
 
                 decimal basePrice = product.MRP - discountAmount;
-
                 decimal gstAmount = (basePrice * product.GST) / 100;
 
                 decimal salePrice = basePrice + gstAmount;
@@ -305,18 +265,24 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 product.BasePrice = basePrice;
                 product.SalePrice = salePrice;
 
-                // =========================
-                // INSERT INTO DB
-                // =========================
+                // ================= INSERT =================
                 var query = @"
-INSERT INTO products 
-(productname, slug,type, shortdescription, description, sku, brandid, categoryid,
- baseprice, mrp, discountprice, saleprice, gst, stock,
- productimageurl, galleryimages, sizes, color, isactive, createdat, updatedat)
-VALUES 
-(@ProductName, @Slug, @Type, @ShortDescription, @Description, @SKU, @BrandId, @CategoryId,
- @BasePrice, @MRP, @DiscountPrice, @SalePrice, @GST, @Stock,
- @ProductImageUrl, @GalleryImages::text[], @Sizes::text[], @Color, @IsActive, NOW(), NOW())";
+INSERT INTO products
+(
+productname, slug, type, shortdescription, description, sku,
+brandid, categoryid,
+baseprice, mrp, discountprice, saleprice, gst, stock,
+productimageurl, galleryimages, sizes, color, isactive,
+createdat, updatedat
+)
+VALUES
+(
+@ProductName, @Slug, @Type, @ShortDescription, @Description, @SKU,
+@BrandId, @CategoryId,
+@BasePrice, @MRP, @DiscountPrice, @SalePrice, @GST, @Stock,
+@ProductImageUrl, @GalleryImages, @Sizes, @Color, @IsActive,
+NOW(), NOW()
+)";
 
                 using var cmd = new NpgsqlCommand(query, con);
 
@@ -332,7 +298,7 @@ VALUES
                 cmd.Parameters.AddWithValue("BasePrice", product.BasePrice ?? 0);
                 cmd.Parameters.AddWithValue("MRP", product.MRP);
                 cmd.Parameters.AddWithValue("DiscountPrice", discountPercent);
-                cmd.Parameters.AddWithValue("SalePrice", product.SalePrice ?? 0);
+                cmd.Parameters.AddWithValue("SalePrice", salePrice);
                 cmd.Parameters.AddWithValue("GST", product.GST);
                 cmd.Parameters.AddWithValue("Stock", product.Stock);
 
@@ -340,16 +306,16 @@ VALUES
                     (object?)productImageUrl ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("GalleryImages",
-                    galleryUrls.Count > 0 ? galleryUrls.ToArray() : (object)DBNull.Value);
+                    galleryUrls.Count > 0 ? galleryUrls.ToArray() : Array.Empty<string>());
 
-                cmd.Parameters.AddWithValue("Sizes",
-                    product.Sizes ?? (object)DBNull.Value);
+                // ================= FIXED SIZES =================
+                cmd.Parameters.AddWithValue(
+                    "Sizes",
+                    (object?)product.Sizes ?? Array.Empty<int>()
+                );
 
-                cmd.Parameters.AddWithValue("Color",
-                    (object?)product.Color ?? DBNull.Value);
-
-                cmd.Parameters.AddWithValue("IsActive",
-                    product.IsActive);
+                cmd.Parameters.AddWithValue("Color", (object?)product.Color ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("IsActive", product.IsActive);
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -357,10 +323,13 @@ VALUES
                 {
                     status = true,
                     message = "Product added successfully",
-                    productImage = productImageUrl,
-                    galleryImages = galleryUrls,
-                    basePrice,
-                    salePrice
+                    data = new
+                    {
+                        productImage = productImageUrl,
+                        galleryImages = galleryUrls,
+                        basePrice,
+                        salePrice
+                    }
                 });
             }
             catch (Exception ex)
@@ -372,7 +341,6 @@ VALUES
                 });
             }
         }
-
 
 
         public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
@@ -905,7 +873,13 @@ WHERE id=@id
                 product.GalleryImages = reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages"));
 
             if (!reader.IsDBNull(reader.GetOrdinal("sizes")))
-                product.Sizes = reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes"));
+            {
+                product.Sizes = reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"));
+            }
+            else
+            {
+                product.Sizes = Array.Empty<int>();
+            }
 
             return product;
         }

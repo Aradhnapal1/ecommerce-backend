@@ -177,7 +177,7 @@ namespace Ecommerce_Backend.Models
         public IFormFile? ProductImage { get; set; }
         public List<IFormFile>? GalleryFiles { get; set; }
 
-        public string[]? Sizes { get; set; }
+        public int[]? Sizes { get; set; }
 
         public string? Color { get; set; }
 
