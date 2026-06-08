@@ -166,7 +166,7 @@ CREATE TABLE product_variants (
 
     sku VARCHAR(100),
 
-    sizes TEXT[],
+    sizes INT[],
 
     color VARCHAR(100),
 

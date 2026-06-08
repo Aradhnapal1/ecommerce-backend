@@ -350,12 +350,9 @@ NOW(), NOW()
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                // =========================
-                // CHECK PRODUCT EXISTS
-                // =========================
+                // ================= CHECK PRODUCT =================
                 using (var checkCmd = new NpgsqlCommand(
-                    "SELECT COUNT(*) FROM products WHERE id=@id",
-                    con))
+                    "SELECT COUNT(*) FROM products WHERE id=@id", con))
                 {
                     checkCmd.Parameters.AddWithValue("@id", id);
 
@@ -371,9 +368,7 @@ NOW(), NOW()
                     }
                 }
 
-                // =========================
-                // CLOUDINARY SETUP
-                // =========================
+                // ================= CLOUDINARY =================
                 var account = new Account(
                     _configuration["CloudinarySettings:CloudName"],
                     _configuration["CloudinarySettings:ApiKey"],
@@ -382,51 +377,37 @@ NOW(), NOW()
 
                 var cloudinary = new Cloudinary(account);
 
-                // =========================
-                // MAIN IMAGE UPDATE
-                // =========================
-                string imageUrl = "";
+                // ================= GET OLD IMAGE =================
+                string imageUrl = null;
 
                 if (product.ProductImage != null && product.ProductImage.Length > 0)
                 {
-                    // Get old image url
-                    string oldImageUrl = "";
+                    using var getCmd = new NpgsqlCommand(
+                        "SELECT productimageurl FROM products WHERE id=@id", con);
 
-                    using (var getCmd = new NpgsqlCommand(
-                        "SELECT productimageurl FROM products WHERE id=@id",
-                        con))
-                    {
-                        getCmd.Parameters.AddWithValue("@id", id);
+                    getCmd.Parameters.AddWithValue("@id", id);
 
-                        var result = await getCmd.ExecuteScalarAsync();
+                    var oldImageUrl = (await getCmd.ExecuteScalarAsync())?.ToString();
 
-                        oldImageUrl = result?.ToString() ?? "";
-                    }
-
-                    // Delete old image from Cloudinary
+                    // ================= DELETE OLD IMAGE (FIXED) =================
                     if (!string.IsNullOrEmpty(oldImageUrl))
                     {
                         try
                         {
                             var uri = new Uri(oldImageUrl);
 
+                            // extract public id from cloudinary url
                             var parts = uri.AbsolutePath.Split("/upload/");
-
                             if (parts.Length > 1)
                             {
                                 var publicId = parts[1];
 
-                                publicId = System.Text.RegularExpressions.Regex
-                                    .Replace(publicId, @"^v\d+\/", "");
+                                publicId = Regex.Replace(publicId, @"^v\d+/", "");
 
-                                publicId = Path.Combine(
-                                    Path.GetDirectoryName(publicId) ?? "",
-                                    Path.GetFileNameWithoutExtension(publicId)
-                                ).Replace("\\", "/");
+                                publicId = Path.ChangeExtension(publicId, null)
+                                    .Replace("\\", "/");
 
-                                await cloudinary.DestroyAsync(
-                                    new DeletionParams(publicId)
-                                );
+                                await cloudinary.DestroyAsync(new DeletionParams(publicId));
                             }
                         }
                         catch
@@ -435,15 +416,12 @@ NOW(), NOW()
                         }
                     }
 
-                    // Upload new image
+                    // ================= UPLOAD NEW IMAGE =================
                     using var stream = product.ProductImage.OpenReadStream();
 
                     var uploadParams = new ImageUploadParams
                     {
-                        File = new FileDescription(
-                            product.ProductImage.FileName,
-                            stream
-                        ),
+                        File = new FileDescription(product.ProductImage.FileName, stream),
                         Folder = "products/main"
                     };
 
@@ -461,195 +439,92 @@ NOW(), NOW()
                     imageUrl = uploadResult.SecureUrl.ToString();
                 }
 
-                // =========================
-                // GALLERY IMAGE UPDATE
-                // =========================
+                // ================= GALLERY =================
                 List<string> galleryUrls = new();
 
                 if (product.GalleryFiles != null && product.GalleryFiles.Count > 0)
                 {
                     foreach (var file in product.GalleryFiles)
                     {
-                        if (file == null || file.Length == 0)
-                            continue;
-
                         using var stream = file.OpenReadStream();
 
                         var uploadParams = new ImageUploadParams
                         {
-                            File = new FileDescription(
-                                file.FileName,
-                                stream
-                            ),
+                            File = new FileDescription(file.FileName, stream),
                             Folder = "products/gallery"
                         };
 
                         var uploadResult = await cloudinary.UploadAsync(uploadParams);
 
                         if (uploadResult.Error == null)
-                        {
-                            galleryUrls.Add(
-                                uploadResult.SecureUrl.ToString()
-                            );
-                        }
+                            galleryUrls.Add(uploadResult.SecureUrl.ToString());
                     }
                 }
 
-                // =========================
-                // DISCOUNT % LOGIC
-                // =========================
+                // ================= PRICE CALC =================
                 decimal discountPercent = product.DiscountPrice ?? 0;
+                decimal discountAmount = (product.MRP * discountPercent) / 100;
 
-                decimal discountAmount =
-                    (product.MRP * discountPercent) / 100;
+                decimal basePrice = product.MRP - discountAmount;
+                decimal gstAmount = (basePrice * product.GST) / 100;
 
-                decimal basePrice =
-                    product.MRP - discountAmount;
+                decimal salePrice = basePrice + gstAmount;
 
-                decimal gstAmount =
-                    (basePrice * product.GST) / 100;
-
-                decimal salePrice =
-                    basePrice + gstAmount;
-
-                product.BasePrice = basePrice;
-                product.SalePrice = salePrice;
-
-                // =========================
-                // UPDATE PRODUCT
-                // =========================
+                // ================= UPDATE QUERY =================
                 using var cmd = new NpgsqlCommand(@"
 UPDATE products SET
-
 productname=@productname,
 shortdescription=@shortdescription,
 description=@description,
 sku=@sku,
-
 brandid=@brandid,
 categoryid=@categoryid,
-
 baseprice=@baseprice,
 mrp=@mrp,
 discountprice=@discountprice,
 saleprice=@saleprice,
 gst=@gst,
-
 stock=@stock,
 
-productimageurl=
-CASE
-    WHEN @productimageurl IS NULL
-    THEN productimageurl
-    ELSE @productimageurl
-END,
+productimageurl = COALESCE(@productimageurl, productimageurl),
 
-galleryimages=
-CASE
-    WHEN @galleryimages IS NULL
-    THEN galleryimages
-    ELSE @galleryimages
-END,
+galleryimages = COALESCE(@galleryimages, galleryimages),
 
 sizes=@sizes,
 color=@color,
-
 isactive=@isactive,
 updatedat=NOW()
 
-WHERE id=@id
-", con);
+WHERE id=@id", con);
 
                 cmd.Parameters.AddWithValue("@id", id);
+                cmd.Parameters.AddWithValue("@productname", product.ProductName ?? "");
+                cmd.Parameters.AddWithValue("@shortdescription", (object?)product.ShortDescription ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@description", (object?)product.Description ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@sku", (object?)product.SKU ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@brandid", (object?)product.BrandId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@categoryid", (object?)product.CategoryId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@baseprice", basePrice);
+                cmd.Parameters.AddWithValue("@mrp", product.MRP);
+                cmd.Parameters.AddWithValue("@discountprice", discountPercent);
+                cmd.Parameters.AddWithValue("@saleprice", salePrice);
+                cmd.Parameters.AddWithValue("@gst", product.GST);
+                cmd.Parameters.AddWithValue("@stock", product.Stock);
 
-                cmd.Parameters.AddWithValue(
-                    "@productname",
-                    product.ProductName ?? ""
-                );
+                cmd.Parameters.AddWithValue("@productimageurl",
+                    (object?)imageUrl ?? DBNull.Value);
 
-                cmd.Parameters.AddWithValue(
-                    "@shortdescription",
-                    (object?)product.ShortDescription ?? DBNull.Value
-                );
+                cmd.Parameters.AddWithValue("@galleryimages",
+                    galleryUrls.Count > 0 ? galleryUrls.ToArray() : (object)DBNull.Value);
 
-                cmd.Parameters.AddWithValue(
-                    "@description",
-                    (object?)product.Description ?? DBNull.Value
-                );
+                cmd.Parameters.AddWithValue("@sizes",
+                    product.Sizes ?? (object)DBNull.Value);
 
-                cmd.Parameters.AddWithValue(
-                    "@sku",
-                    (object?)product.SKU ?? DBNull.Value
-                );
+                cmd.Parameters.AddWithValue("@color",
+                    (object?)product.Color ?? DBNull.Value);
 
-                cmd.Parameters.AddWithValue(
-                    "@brandid",
-                    (object?)product.BrandId ?? DBNull.Value
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@categoryid",
-                    (object?)product.CategoryId ?? DBNull.Value
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@baseprice",
-                    product.BasePrice ?? 0
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@mrp",
-                    product.MRP
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@discountprice",
-                    discountPercent
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@saleprice",
-                    product.SalePrice ?? 0
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@gst",
-                    product.GST
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@stock",
-                    product.Stock
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@productimageurl",
-                    string.IsNullOrEmpty(imageUrl)
-                        ? DBNull.Value
-                        : imageUrl
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@galleryimages",
-                    galleryUrls.Count > 0
-                        ? galleryUrls.ToArray()
-                        : (object)DBNull.Value
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@sizes",
-                    product.Sizes ?? (object)DBNull.Value
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@color",
-                    (object?)product.Color ?? DBNull.Value
-                );
-
-                cmd.Parameters.AddWithValue(
-                    "@isactive",
-                    product.IsActive
-                );
+                cmd.Parameters.AddWithValue("@isactive",
+                    product.IsActive);
 
                 await cmd.ExecuteNonQueryAsync();
 
@@ -657,10 +532,10 @@ WHERE id=@id
                 {
                     status = true,
                     message = "Product updated successfully",
-                    productImage = imageUrl,
-                    galleryImages = galleryUrls,
-                    basePrice = basePrice,
-                    salePrice = salePrice
+                    image = imageUrl,
+                    gallery = galleryUrls,
+                    basePrice,
+                    salePrice
                 });
             }
             catch (Exception ex)

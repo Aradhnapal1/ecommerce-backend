@@ -24,7 +24,22 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = "SELECT * FROM product_variants ORDER BY id DESC";
+            var query = @"
+SELECT 
+    pv.*,
+
+    c.color_name,
+
+    (
+        SELECT ARRAY_AGG(s.size_name)
+        FROM sizes s
+        WHERE s.id = ANY(pv.sizes)
+    ) AS size_names
+
+FROM product_variants pv
+LEFT JOIN colors c ON c.id = pv.color::int
+ORDER BY pv.id DESC;
+";
 
             using var cmd = new NpgsqlCommand(query, con);
             using var reader = await cmd.ExecuteReaderAsync();
@@ -35,42 +50,71 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     Id = reader.GetInt32(reader.GetOrdinal("id")),
                     ProductId = reader.GetInt32(reader.GetOrdinal("productid")),
-                    VariantName = reader.IsDBNull(reader.GetOrdinal("variantname"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("variantname")),
-                    Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
-                    SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
 
+                    VariantName = reader["variantname"]?.ToString(),
+                    Slug = reader["slug"]?.ToString(),
+                    SKU = reader["sku"]?.ToString(),
+
+                    // ================= SIZE IDS =================
                     Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
-                        ? null
-                        : reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes")),
+                        ? Array.Empty<int>()
+                        : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
 
-                    Color = reader.IsDBNull(reader.GetOrdinal("color"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("color")),
+                    // ================= SIZE NAMES =================
+                    SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                        ? new List<string>()
+                        : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList(),
 
-                    MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
-                    DiscountPercent = reader.GetDecimal(reader.GetOrdinal("discountpercent")),
-                    BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
-                    SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
-                    GST = reader.GetDecimal(reader.GetOrdinal("gst")),
-                    Stock = reader.GetInt32(reader.GetOrdinal("stock")),
+                    // ================= COLOR (STRING DIRECT) =================
+                    Color = reader["color"]?.ToString(),
+                    ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
+    ? null
+    : reader.GetString(reader.GetOrdinal("color_name")),
 
-                    VariantImageUrl = reader.IsDBNull(reader.GetOrdinal("variantimageurl"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("variantimageurl")),
+                    MRP = reader.IsDBNull(reader.GetOrdinal("mrp"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("mrp")),
+
+                    DiscountPercent = reader.IsDBNull(reader.GetOrdinal("discountpercent"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("discountpercent")),
+
+                    BasePrice = reader.IsDBNull(reader.GetOrdinal("baseprice"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("baseprice")),
+
+                    SalePrice = reader.IsDBNull(reader.GetOrdinal("saleprice"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("saleprice")),
+
+                    GST = reader.IsDBNull(reader.GetOrdinal("gst"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("gst")),
+
+                    Stock = reader.IsDBNull(reader.GetOrdinal("stock"))
+                        ? 0
+                        : reader.GetInt32(reader.GetOrdinal("stock")),
+
+                    VariantImageUrl = reader["variantimageurl"]?.ToString(),
 
                     GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
-                        ? null
+                        ? Array.Empty<string>()
                         : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
 
-                    IsActive = reader.GetBoolean(reader.GetOrdinal("isactive"))
+                    IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
+
+                    CreatedAt = reader.IsDBNull(reader.GetOrdinal("createdat"))
+                        ? DateTime.MinValue
+                        : reader.GetDateTime(reader.GetOrdinal("createdat")),
+
+                    UpdatedAt = reader.IsDBNull(reader.GetOrdinal("updatedat"))
+                        ? DateTime.MinValue
+                        : reader.GetDateTime(reader.GetOrdinal("updatedat"))
                 });
             }
 
             return variants;
         }
-
 
 
         public async Task<object> AddVariant(ProductVariantModel variant)
@@ -257,7 +301,13 @@ RETURNING id";
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Slug", slug);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("Sizes", (object?)variant.Sizes ?? DBNull.Value);
+                // INTEGER[] Sizes
+                cmd.Parameters.AddWithValue(
+                    "Sizes",
+                    variant.Sizes != null && variant.Sizes.Length > 0
+                        ? variant.Sizes
+                        : Array.Empty<int>()
+                );
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("MRP", mrp);
@@ -300,17 +350,34 @@ RETURNING id";
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
+                // ================= CHECK EXISTS =================
+                using (var checkCmd = new NpgsqlCommand(
+                    "SELECT COUNT(*) FROM product_variants WHERE id = @id", con))
+                {
+                    checkCmd.Parameters.AddWithValue("id", id);
+
+                    var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+
+                    if (exists == 0)
+                    {
+                        return new
+                        {
+                            status = false,
+                            message = "Variant not found"
+                        };
+                    }
+                }
+
                 // ================= GET OLD IMAGE =================
                 string oldImageUrl = null;
 
-                var getQuery = "SELECT variantimageurl FROM product_variants WHERE id = @id";
-
-                using (var getCmd = new NpgsqlCommand(getQuery, con))
+                using (var getCmd = new NpgsqlCommand(
+                    "SELECT variantimageurl FROM product_variants WHERE id = @id", con))
                 {
                     getCmd.Parameters.AddWithValue("id", id);
 
                     var result = await getCmd.ExecuteScalarAsync();
-                    oldImageUrl = result == DBNull.Value ? null : result?.ToString();
+                    oldImageUrl = result?.ToString();
                 }
 
                 // ================= CLOUDINARY =================
@@ -324,9 +391,35 @@ RETURNING id";
 
                 string newImageUrl = oldImageUrl;
 
-                // ================= IMAGE REPLACE =================
+                // ================= DELETE OLD + UPLOAD NEW IMAGE =================
                 if (variant.VariantImage != null && variant.VariantImage.Length > 0)
                 {
+                    // 🔥 DELETE OLD IMAGE
+                    if (!string.IsNullOrEmpty(oldImageUrl))
+                    {
+                        try
+                        {
+                            var uri = new Uri(oldImageUrl);
+
+                            var parts = uri.AbsolutePath.Split("/upload/");
+                            if (parts.Length > 1)
+                            {
+                                var publicId = parts[1];
+
+                                publicId = Regex.Replace(publicId, @"^v\d+\/", "");
+
+                                await cloudinary.DestroyAsync(
+                                    new DeletionParams(publicId)
+                                );
+                            }
+                        }
+                        catch
+                        {
+                            // ignore delete error
+                        }
+                    }
+
+                    // 🔥 UPLOAD NEW IMAGE
                     using var stream = variant.VariantImage.OpenReadStream();
 
                     var uploadParams = new ImageUploadParams
@@ -338,43 +431,53 @@ RETURNING id";
                     var uploadResult = await cloudinary.UploadAsync(uploadParams);
 
                     if (uploadResult.Error != null)
-                        throw new Exception(uploadResult.Error.Message);
+                    {
+                        return new
+                        {
+                            status = false,
+                            message = uploadResult.Error.Message
+                        };
+                    }
 
                     newImageUrl = uploadResult.SecureUrl.ToString();
                 }
 
-                // ================= PRICE CALC =================
+                // ================= PRICE CALCULATION =================
                 decimal mrp = variant.MRP ?? 0;
                 decimal discountPercent = variant.DiscountPercent ?? 0;
                 decimal gstPercent = variant.GST;
 
                 decimal discountAmount = (mrp * discountPercent) / 100;
                 decimal basePrice = mrp - discountAmount;
-
                 if (basePrice < 0) basePrice = 0;
 
                 decimal gstAmount = (basePrice * gstPercent) / 100;
                 decimal salePrice = basePrice + gstAmount;
 
+                // ================= FIX SIZES =================
+                int[] sizesArray =
+                    variant.Sizes != null && variant.Sizes.Length > 0
+                    ? variant.Sizes
+                    : Array.Empty<int>();
+
                 // ================= UPDATE QUERY =================
                 var query = @"
 UPDATE product_variants
 SET
-productid = @ProductId,
-variantname = @VariantName,
-slug = @Slug,
-sku = @SKU,
-sizes = @Sizes,
-color = @Color,
-mrp = @MRP,
-discountpercent = @DiscountPercent,
-baseprice = @BasePrice,
-saleprice = @SalePrice,
-gst = @GST,
-stock = @Stock,
-variantimageurl = @VariantImageUrl,
-isactive = @IsActive,
-updatedat = NOW()
+    productid = @ProductId,
+    variantname = @VariantName,
+    sku = @SKU,
+    sizes = @Sizes,
+    color = @Color,
+    mrp = @MRP,
+    discountpercent = @DiscountPercent,
+    baseprice = @BasePrice,
+    saleprice = @SalePrice,
+    gst = @GST,
+    stock = @Stock,
+    variantimageurl = @VariantImageUrl,
+    isactive = @IsActive,
+    updatedat = NOW()
 WHERE id = @Id";
 
                 using var cmd = new NpgsqlCommand(query, con);
@@ -383,8 +486,8 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("ProductId", variant.ProductId);
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("Sizes", (object?)variant.Sizes ?? DBNull.Value);
+
+                cmd.Parameters.AddWithValue("Sizes", sizesArray);
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("MRP", mrp);
@@ -394,26 +497,19 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("GST", gstPercent);
                 cmd.Parameters.AddWithValue("Stock", variant.Stock);
 
-                cmd.Parameters.AddWithValue("VariantImageUrl",
-                    string.IsNullOrEmpty(newImageUrl) ? DBNull.Value : newImageUrl);
+                cmd.Parameters.AddWithValue(
+                    "VariantImageUrl",
+                    string.IsNullOrEmpty(newImageUrl) ? DBNull.Value : newImageUrl
+                );
 
                 cmd.Parameters.AddWithValue("IsActive", variant.IsActive);
 
                 var rows = await cmd.ExecuteNonQueryAsync();
 
-                if (rows == 0)
-                {
-                    return new
-                    {
-                        status = false,
-                        message = "Variant not found"
-                    };
-                }
-
                 return new
                 {
-                    status = true,
-                    message = "Variant updated successfully",
+                    status = rows > 0,
+                    message = rows > 0 ? "Variant updated successfully" : "Variant not found",
                     updatedImage = newImageUrl,
                     basePrice,
                     salePrice
@@ -515,7 +611,21 @@ WHERE id = @Id";
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = "SELECT * FROM product_variants WHERE id = @id";
+            var query = @"
+    SELECT 
+        pv.*,
+        c.color_name,
+
+        (
+            SELECT ARRAY_AGG(s.size_name)
+            FROM sizes s
+            WHERE s.id = ANY(pv.sizes)
+        ) AS size_names
+
+    FROM product_variants pv
+    LEFT JOIN colors c ON c.id = pv.color::int
+    WHERE pv.id = @id;
+    ";
 
             using var cmd = new NpgsqlCommand(query, con);
             cmd.Parameters.AddWithValue("id", id);
@@ -529,20 +639,43 @@ WHERE id = @Id";
             {
                 Id = reader.GetInt32(reader.GetOrdinal("id")),
                 ProductId = reader.GetInt32(reader.GetOrdinal("productid")),
-                VariantName = reader.IsDBNull(reader.GetOrdinal("variantname")) ? null : reader.GetString(reader.GetOrdinal("variantname")),
-                Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
-                SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
-                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes")) ? null : reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes")),
-                Color = reader.IsDBNull(reader.GetOrdinal("color")) ? null : reader.GetString(reader.GetOrdinal("color")),
+
+                VariantName = reader["variantname"]?.ToString(),
+                Slug = reader["slug"]?.ToString(),
+                SKU = reader["sku"]?.ToString(),
+
+                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
+                    ? Array.Empty<int>()
+                    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
+
+                Color = reader["color"]?.ToString(),
+
+                // ✅ NEW FIELD
+                ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("color_name")),
+
                 MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
                 DiscountPercent = reader.GetDecimal(reader.GetOrdinal("discountpercent")),
                 BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
                 SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
                 GST = reader.GetDecimal(reader.GetOrdinal("gst")),
                 Stock = reader.GetInt32(reader.GetOrdinal("stock")),
-                VariantImageUrl = reader.IsDBNull(reader.GetOrdinal("variantimageurl")) ? null : reader.GetString(reader.GetOrdinal("variantimageurl")),
-                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages")) ? null : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
-                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive"))
+
+                VariantImageUrl = reader.IsDBNull(reader.GetOrdinal("variantimageurl"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("variantimageurl")),
+
+                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
+                    ? Array.Empty<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
+
+                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
+
+                // optional if model has it
+                SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                    ? new List<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
             };
 
             return variant;
