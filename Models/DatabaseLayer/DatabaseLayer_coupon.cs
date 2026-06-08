@@ -109,7 +109,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 coupon_type,
                 coupon_value,
                 min_order_amount,
-                max_discount,
                 usage_limit,
                 start_date,
                 end_date,
