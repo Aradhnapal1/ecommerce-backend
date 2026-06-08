@@ -832,7 +832,27 @@ WHERE id=@id
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = "SELECT * FROM products WHERE id = @id";
+            var query = @"
+SELECT 
+    p.*,
+    b.brand_name,
+    c.category_name,
+    col.color_name,
+
+    (
+        SELECT ARRAY_AGG(s.size_name)
+        FROM sizes s
+        WHERE s.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
+    ) AS size_names
+
+FROM products p
+
+LEFT JOIN brands b ON b.id = p.brandid
+LEFT JOIN categories c ON c.id = p.categoryid
+LEFT JOIN colors col ON col.id = p.color::INT
+
+WHERE p.id = @id;
+";
 
             using var cmd = new NpgsqlCommand(query, con);
             cmd.Parameters.AddWithValue("id", id);
@@ -845,41 +865,60 @@ WHERE id=@id
             var product = new ProductModel
             {
                 Id = reader.GetInt32(reader.GetOrdinal("id")),
-                ProductName = reader.GetString(reader.GetOrdinal("productname")),
-                Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
-                Type = reader.IsDBNull(reader.GetOrdinal("type")) ? null : reader.GetString(reader.GetOrdinal("type")),
-                ShortDescription = reader.IsDBNull(reader.GetOrdinal("shortdescription")) ? null : reader.GetString(reader.GetOrdinal("shortdescription")),
-                Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
-                SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
-                BrandId = reader.IsDBNull(reader.GetOrdinal("brandid")) ? null : reader.GetInt32(reader.GetOrdinal("brandid")),
-                CategoryId = reader.IsDBNull(reader.GetOrdinal("categoryid")) ? null : reader.GetInt32(reader.GetOrdinal("categoryid")),
+                ProductName = reader["productname"]?.ToString(),
+                Slug = reader["slug"]?.ToString(),
+                Type = reader["type"]?.ToString(),
+                ShortDescription = reader["shortdescription"]?.ToString(),
+                Description = reader["description"]?.ToString(),
+                SKU = reader["sku"]?.ToString(),
+
+                BrandId = reader.IsDBNull(reader.GetOrdinal("brandid"))
+                    ? null
+                    : reader.GetInt32(reader.GetOrdinal("brandid")),
+
+                CategoryId = reader.IsDBNull(reader.GetOrdinal("categoryid"))
+                    ? null
+                    : reader.GetInt32(reader.GetOrdinal("categoryid")),
 
                 BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
                 MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
-                DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice")) ? null : reader.GetDecimal(reader.GetOrdinal("discountprice")),
+
+                DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice"))
+                    ? null
+                    : reader.GetDecimal(reader.GetOrdinal("discountprice")),
+
                 SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
                 GST = reader.GetDecimal(reader.GetOrdinal("gst")),
                 Stock = reader.GetInt32(reader.GetOrdinal("stock")),
 
-                ProductImageUrl = reader.IsDBNull(reader.GetOrdinal("productimageurl")) ? null : reader.GetString(reader.GetOrdinal("productimageurl")),
-                Color = reader.IsDBNull(reader.GetOrdinal("color")) ? null : reader.GetString(reader.GetOrdinal("color")),
+                ProductImageUrl = reader["productimageurl"]?.ToString(),
+
+                Color = reader["color"]?.ToString(),
 
                 IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("createdat")),
-                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updatedat"))
+                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updatedat")),
+
+                BrandName = reader.IsDBNull(reader.GetOrdinal("brand_name"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("brand_name")),
+
+                CategoryName = reader.IsDBNull(reader.GetOrdinal("category_name"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("category_name")),
+
+                ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("color_name")),
+
+                SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                    ? new List<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList(),
+
+                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
+                    ? Array.Empty<int>()
+                    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"))
             };
-
-            if (!reader.IsDBNull(reader.GetOrdinal("galleryimages")))
-                product.GalleryImages = reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages"));
-
-            if (!reader.IsDBNull(reader.GetOrdinal("sizes")))
-            {
-                product.Sizes = reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"));
-            }
-            else
-            {
-                product.Sizes = Array.Empty<int>();
-            }
 
             return product;
         }
