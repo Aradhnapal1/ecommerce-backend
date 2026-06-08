@@ -247,5 +247,21 @@ namespace Ecommerce_Backend.Models
 
         public DateTime UpdatedAt { get; set; }
     }
+    public class CouponModel
+    {
+        public int Id { get; set; }
+        public string CouponCode { get; set; }
+        public string CouponType { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal MinimumPurchaseAmount { get; set; }
+        public decimal? MaximumDiscountAmount { get; set; }
+        public int UsageLimit { get; set; } = 1;
+        public DateTime StartDate { get; set; }
 
+        public DateTime ExpiryDate { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
 }

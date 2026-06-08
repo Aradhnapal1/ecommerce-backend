@@ -122,7 +122,7 @@ namespace Ecommerce_Backend.Controllers
         [HttpDelete("delete/{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            var result = await _businessLayer.DeleteUser(id);
+            var result =     await _businessLayer.DeleteUser(id);
             if (result == null)
                 return NotFound(new { message = "User not found" });
 
