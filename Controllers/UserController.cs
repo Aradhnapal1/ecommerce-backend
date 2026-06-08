@@ -123,7 +123,7 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> DeleteUser(int id)
         {
             var result = await _businessLayer.DeleteUser(id);
-            if (!result)
+            if (result == null)
                 return NotFound(new { message = "User not found" });
 
             return Ok(new { message = "User deleted successfully" });
