@@ -565,7 +565,21 @@ WHERE id = @Id";
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = "SELECT * FROM product_variants WHERE id = @id";
+            var query = @"
+    SELECT 
+        pv.*,
+        c.color_name,
+
+        (
+            SELECT ARRAY_AGG(s.size_name)
+            FROM sizes s
+            WHERE s.id = ANY(pv.sizes)
+        ) AS size_names
+
+    FROM product_variants pv
+    LEFT JOIN colors c ON c.id = pv.color::int
+    WHERE pv.id = @id;
+    ";
 
             using var cmd = new NpgsqlCommand(query, con);
             cmd.Parameters.AddWithValue("id", id);
@@ -579,22 +593,43 @@ WHERE id = @Id";
             {
                 Id = reader.GetInt32(reader.GetOrdinal("id")),
                 ProductId = reader.GetInt32(reader.GetOrdinal("productid")),
-                VariantName = reader.IsDBNull(reader.GetOrdinal("variantname")) ? null : reader.GetString(reader.GetOrdinal("variantname")),
-                Slug = reader.IsDBNull(reader.GetOrdinal("slug")) ? null : reader.GetString(reader.GetOrdinal("slug")),
-                SKU = reader.IsDBNull(reader.GetOrdinal("sku")) ? null : reader.GetString(reader.GetOrdinal("sku")),
+
+                VariantName = reader["variantname"]?.ToString(),
+                Slug = reader["slug"]?.ToString(),
+                SKU = reader["sku"]?.ToString(),
+
                 Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
-    ? Array.Empty<int>()
-    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
-                Color = reader.IsDBNull(reader.GetOrdinal("color")) ? null : reader.GetString(reader.GetOrdinal("color")),
+                    ? Array.Empty<int>()
+                    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
+
+                Color = reader["color"]?.ToString(),
+
+                // ✅ NEW FIELD
+                ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("color_name")),
+
                 MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
                 DiscountPercent = reader.GetDecimal(reader.GetOrdinal("discountpercent")),
                 BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
                 SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
                 GST = reader.GetDecimal(reader.GetOrdinal("gst")),
                 Stock = reader.GetInt32(reader.GetOrdinal("stock")),
-                VariantImageUrl = reader.IsDBNull(reader.GetOrdinal("variantimageurl")) ? null : reader.GetString(reader.GetOrdinal("variantimageurl")),
-                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages")) ? null : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
-                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive"))
+
+                VariantImageUrl = reader.IsDBNull(reader.GetOrdinal("variantimageurl"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("variantimageurl")),
+
+                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
+                    ? Array.Empty<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
+
+                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
+
+                // optional if model has it
+                SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                    ? new List<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
             };
 
             return variant;
