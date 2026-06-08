@@ -1,5 +1,7 @@
 ﻿using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Razor.Language.Intermediate;
 using Npgsql;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
@@ -12,6 +14,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<UserLoginResponse?> UserLogin(UserLoginRequest model);
         Task<UserLoginResponse?> GetUserById(int id);
         Task<List<UserLoginResponse>> GetAllUsers();
+        Task<IActionResult> DeleteUser(int id);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -202,15 +205,27 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             return users;
         }
 
+        public async Task<IActionResult> DeleteUser(int id)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+            using var cmd = new NpgsqlCommand(@"
+       DELETE FROM user_register
+       WHERE id = @id
+    ", con);
+            cmd.Parameters.AddWithValue("@id", id);
 
-
-
-
-
-
-
-
-
-
+            await cmd.ExecuteNonQueryAsync();
+            return new OkResult();
+        }
     }
 }
+
+
+
+
+
+
+
+
+   
