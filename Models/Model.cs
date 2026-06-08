@@ -215,20 +215,24 @@ namespace Ecommerce_Backend.Models
         public string? VariantName { get; set; }
         public string? Slug { get; set; }
 
-
         public string? SKU { get; set; }
 
-        public string[]? Sizes { get; set; }
+        // ONLY SIZE IDS
+        public int[]? Sizes { get; set; }
 
+        // COLOR IS STRING (IMPORTANT FIX)
         public string? Color { get; set; }
 
-        public decimal? MRP { get; set; }
+        // OPTIONAL: SIZE NAMES (JOIN RESULT)
+        public List<string>? SizeNames { get; set; }
 
+        public string? ColorName { get; set; }
+
+        public decimal? MRP { get; set; }
         public decimal? DiscountPercent { get; set; }
         public decimal GST { get; set; }
 
         public decimal? BasePrice { get; set; }
-
         public decimal? SalePrice { get; set; }
 
         public int Stock { get; set; }
@@ -238,13 +242,11 @@ namespace Ecommerce_Backend.Models
         public string[]? GalleryImages { get; set; }
 
         public IFormFile? VariantImage { get; set; }
-
         public List<IFormFile>? GalleryFiles { get; set; }
 
         public bool IsActive { get; set; }
 
         public DateTime CreatedAt { get; set; }
-
         public DateTime UpdatedAt { get; set; }
     }
     public class CouponModel
