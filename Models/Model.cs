@@ -254,7 +254,6 @@ namespace Ecommerce_Backend.Models
         public string CouponType { get; set; }
         public decimal DiscountAmount { get; set; }
         public decimal MinimumPurchaseAmount { get; set; }
-        public decimal? MaximumDiscountAmount { get; set; }
         public int UsageLimit { get; set; } = 1;
         public DateTime StartDate { get; set; }
 

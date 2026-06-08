@@ -1,4 +1,5 @@
-﻿using Ecommerce_Backend.Models.BusinessLayer;
+﻿using Ecommerce_Backend.Models;
+using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -20,5 +21,23 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.GetCoupons();
         }
 
+        [HttpPost("add")]
+
+        public async Task <IActionResult> AddCoupon([FromBody] CouponModel coupon) { 
+            return await _businessLayer.AddCoupon(coupon);
+        }
+
+        [HttpPut("edit/{id}")]
+        public async Task <IActionResult>EditCoupun(int id, [FromBody]CouponModel coupon)
+        {
+            return await _businessLayer.EditCoupun(id, coupon);
+        }
+
+        [HttpDelete("delete/{id}")]
+        public async Task <IActionResult> DeleteCoupon(int id)
+        {
+            return await _businessLayer.DeleteCoupon(id);
+        }
     }
+
 }
