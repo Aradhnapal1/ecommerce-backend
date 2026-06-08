@@ -1,5 +1,6 @@
 ﻿using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.DatabaseLayer;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Models.BusinessLayer
 {
@@ -10,6 +11,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<UserLoginResponse?> UserLogin(UserLoginRequest model);
         Task<UserLoginResponse?> GetUserById(int id);
         Task<List<UserLoginResponse>> GetAllUsers();
+        Task<IActionResult> DeleteUser(int id);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -38,6 +40,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<List<UserLoginResponse>> GetAllUsers()
         {
             return await _databaseLayer.GetAllUsers();
+        }
+
+        public async Task<IActionResult> DeleteUser(int id)
+        {
+            return await _databaseLayer.DeleteUser(id);
         }
     }
 }
