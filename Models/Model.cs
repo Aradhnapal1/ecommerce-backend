@@ -181,6 +181,12 @@ namespace Ecommerce_Backend.Models
 
         public string? Color { get; set; }
 
+        public string? BrandName { get; set; }
+        public string? CategoryName { get; set; }
+        public string? ColorName { get; set; }
+
+        public List<string>? SizeNames { get; set; }
+
         public bool IsActive { get; set; }
 
         public DateTime CreatedAt { get; set; }

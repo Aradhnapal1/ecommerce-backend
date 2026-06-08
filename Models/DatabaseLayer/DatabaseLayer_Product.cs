@@ -24,9 +24,37 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = "SELECT * FROM products";
-            using var cmd = new NpgsqlCommand(query, con);
+            var query = @"
+    SELECT
+        p.*,
+        b.brand_name,
+        c.category_name,
+        col.color_name,
 
+        (
+            SELECT ARRAY_AGG(s.size_name)
+            FROM sizes s
+            WHERE s.id = ANY(
+                ARRAY(
+                    SELECT UNNEST(p.sizes)::INT
+                )
+            )
+        ) AS size_names
+
+    FROM products p
+
+    LEFT JOIN brands b
+        ON b.id = p.brandid
+
+    LEFT JOIN categories c
+        ON c.id = p.categoryid
+
+    LEFT JOIN colors col
+        ON col.id = CAST(p.color AS INT)
+
+    ORDER BY p.id DESC";
+
+            using var cmd = new NpgsqlCommand(query, con);
             using var reader = await cmd.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
@@ -34,26 +62,18 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 var product = new ProductModel
                 {
                     Id = reader.GetInt32(reader.GetOrdinal("id")),
-                    ProductName = reader.GetString(reader.GetOrdinal("productname")),
 
-                    Slug = reader.IsDBNull(reader.GetOrdinal("slug"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("slug")),
-                    Type = reader.IsDBNull(reader.GetOrdinal("type"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("type")),
+                    ProductName = reader["productname"]?.ToString(),
 
-                    ShortDescription = reader.IsDBNull(reader.GetOrdinal("shortdescription"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("shortdescription")),
+                    Slug = reader["slug"]?.ToString(),
 
-                    Description = reader.IsDBNull(reader.GetOrdinal("description"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("description")),
+                    Type = reader["type"]?.ToString(),
 
-                    SKU = reader.IsDBNull(reader.GetOrdinal("sku"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("sku")),
+                    ShortDescription = reader["shortdescription"]?.ToString(),
+
+                    Description = reader["description"]?.ToString(),
+
+                    SKU = reader["sku"]?.ToString(),
 
                     BrandId = reader.IsDBNull(reader.GetOrdinal("brandid"))
                         ? null
@@ -63,23 +83,32 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         ? null
                         : reader.GetInt32(reader.GetOrdinal("categoryid")),
 
-                    BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
-                    MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
+                    BasePrice = reader.IsDBNull(reader.GetOrdinal("baseprice"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("baseprice")),
+
+                    MRP = reader.IsDBNull(reader.GetOrdinal("mrp"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("mrp")),
 
                     DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice"))
                         ? null
                         : reader.GetDecimal(reader.GetOrdinal("discountprice")),
 
-                    SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
-                    GST = reader.GetDecimal(reader.GetOrdinal("gst")),
+                    SalePrice = reader.IsDBNull(reader.GetOrdinal("saleprice"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("saleprice")),
 
-                    Stock = reader.GetInt32(reader.GetOrdinal("stock")),
+                    GST = reader.IsDBNull(reader.GetOrdinal("gst"))
+                        ? 0
+                        : reader.GetDecimal(reader.GetOrdinal("gst")),
 
-                    ProductImageUrl = reader.IsDBNull(reader.GetOrdinal("productimageurl"))
-                        ? null
-                        : reader.GetString(reader.GetOrdinal("productimageurl")),
+                    Stock = reader.IsDBNull(reader.GetOrdinal("stock"))
+                        ? 0
+                        : reader.GetInt32(reader.GetOrdinal("stock")),
 
-                    // ✅ Correct TEXT[] handling
+                    ProductImageUrl = reader["productimageurl"]?.ToString(),
+
                     GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
                         ? null
                         : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
@@ -88,14 +117,36 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         ? null
                         : reader.GetFieldValue<string[]>(reader.GetOrdinal("sizes")),
 
-                    Color = reader.IsDBNull(reader.GetOrdinal("color"))
+                    Color = reader["color"]?.ToString(),
+
+                    IsActive = reader.IsDBNull(reader.GetOrdinal("isactive"))
+                        ? false
+                        : reader.GetBoolean(reader.GetOrdinal("isactive")),
+
+                    CreatedAt = reader.IsDBNull(reader.GetOrdinal("createdat"))
+                        ? DateTime.MinValue
+                        : reader.GetDateTime(reader.GetOrdinal("createdat")),
+
+                    UpdatedAt = reader.IsDBNull(reader.GetOrdinal("updatedat"))
+                        ? DateTime.MinValue
+                        : reader.GetDateTime(reader.GetOrdinal("updatedat")),
+
+                    // Joined values
+                    BrandName = reader.IsDBNull(reader.GetOrdinal("brand_name"))
                         ? null
-                        : reader.GetString(reader.GetOrdinal("color")),
+                        : reader.GetString(reader.GetOrdinal("brand_name")),
 
-                    IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
+                    CategoryName = reader.IsDBNull(reader.GetOrdinal("category_name"))
+                        ? null
+                        : reader.GetString(reader.GetOrdinal("category_name")),
 
-                    CreatedAt = reader.GetDateTime(reader.GetOrdinal("createdat")),
-                    UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updatedat"))
+                    ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
+                        ? null
+                        : reader.GetString(reader.GetOrdinal("color_name")),
+
+                    SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                        ? new List<string>()
+                        : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
                 };
 
                 products.Add(product);
