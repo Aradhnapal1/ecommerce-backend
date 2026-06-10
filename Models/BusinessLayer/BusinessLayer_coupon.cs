@@ -35,5 +35,6 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             var result = await _databaseLayer.DeleteCoupon(id);
             return result;
         }
+       
     }
 }

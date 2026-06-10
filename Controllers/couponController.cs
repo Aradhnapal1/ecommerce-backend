@@ -1,6 +1,7 @@
 ﻿using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -38,6 +39,8 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.DeleteCoupon(id);
         }
+
+        
     }
 
 }

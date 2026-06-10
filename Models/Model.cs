@@ -265,4 +265,37 @@ namespace Ecommerce_Backend.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
+
+
+
+    public class CartModel
+    {
+        public int Id { get; set; }
+
+        public int? UserId { get; set; }
+        public string? IpAddress { get; set; }
+
+        public int? ProductId { get; set; }
+
+        public int? VariantId { get; set; }
+
+        public int Quantity { get; set; } = 1;
+
+        public decimal Mrp { get; set; }
+
+        public decimal SalePrice { get; set; }
+
+        public decimal TotalPrice { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
+    }
+
+
+
+
+
+
+
 }
