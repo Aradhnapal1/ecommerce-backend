@@ -338,4 +338,27 @@ namespace Ecommerce_Backend.Models
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
 
+
+    public class CartResponseModel
+    {
+        // ================= CART =================
+        public int Id { get; set; }
+        public int? UserId { get; set; }
+        public string? IpAddress { get; set; }
+
+        public int? ProductId { get; set; }
+        public int? VariantId { get; set; }
+
+        public int Quantity { get; set; }
+        public decimal Mrp { get; set; }
+        public decimal SalePrice { get; set; }
+        public decimal TotalPrice { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        // ================= NESTED =================
+        public ProductModel? Product { get; set; }
+        public ProductVariantModel? Variant { get; set; }
+    }
 }

@@ -20,13 +20,14 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> GetAllCartItems()
         {
             var data = await _businessLayer.GetAllCartItems();
-            return Ok(new { success = true, data = data });
+            return Ok(new { success = true, count = data.Count, data });
         }
 
         [HttpPost("add")]
         public async Task<IActionResult> AddCartItem([FromForm] CartModel cartItem)
         {
-            var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userIdClaim = User.FindFirst("UserId")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out int uid))
             {
@@ -39,10 +40,9 @@ namespace Ecommerce_Backend.Controllers
                 cartItem.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             }
 
-            var result = await _businessLayer.AddCartItem(cartItem);
-            return result;
+            return await _businessLayer.AddCartItem(cartItem);
         }
 
-       
+
     }
 }
