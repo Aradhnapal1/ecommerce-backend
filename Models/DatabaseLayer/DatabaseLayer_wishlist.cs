@@ -291,6 +291,7 @@ SELECT
     w.createdat,
 
     p.productname,
+    p.slug AS product_slug,
     p.sku,
     p.categoryid,
     p.baseprice,
@@ -300,6 +301,8 @@ SELECT
     p.productimageurl,
 
     pv.id AS variant_id,
+    pv.variantname,
+    pv.slug AS variant_slug,
     pv.sku AS variant_sku,
     pv.baseprice AS variant_baseprice,
     pv.saleprice AS variant_saleprice,
@@ -325,36 +328,82 @@ ORDER BY w.createdat DESC";
 
                 while (await reader.ReadAsync())
                 {
-                    var item = new WishlistModel
-                    {
-                        Id = Convert.ToInt32(reader["id"]),
-
-                        UserId =
-                            reader["userid"] == DBNull.Value
-                            ? null
-                            : Convert.ToInt32(reader["userid"]),
-
-                        ProductId =
-                            Convert.ToInt32(reader["productid"]),
-
-                        VariantId =
-                            reader["variantid"] == DBNull.Value
-                            ? null
-                            : Convert.ToInt32(reader["variantid"]),
-
-                        IpAddress =
-                            reader["ipaddress"]?.ToString(),
-
-                        CreatedAt =
-                            Convert.ToDateTime(reader["createdat"])
-                    };
-
-                    // PRODUCT
-                    if (item.VariantId == null)
-                    {
-                        item.Item = new
+                    var wishlistItem =
+                        new WishlistModel
                         {
-                            Id = Convert.ToInt32(reader["productid"]),
+                            Id = Convert.ToInt32(reader["id"]),
+
+                            UserId =
+                                reader["userid"] == DBNull.Value
+                                ? null
+                                : Convert.ToInt32(reader["userid"]),
+
+                            ProductId =
+                                Convert.ToInt32(reader["productid"]),
+
+                            VariantId =
+                                reader["variantid"] == DBNull.Value
+                                ? null
+                                : Convert.ToInt32(reader["variantid"]),
+
+                            IpAddress =
+                                reader["ipaddress"]?.ToString(),
+
+                            CreatedAt =
+                                Convert.ToDateTime(reader["createdat"])
+                        };
+
+                    // Variant Item
+                    if (wishlistItem.VariantId != null)
+                    {
+                        wishlistItem.Item = new
+                        {
+                            Id =
+                                Convert.ToInt32(reader["variant_id"]),
+
+                            Name =
+                                reader["variantname"]?.ToString(),
+
+                            Slug =
+                                reader["variant_slug"]?.ToString(),
+
+                            SKU =
+                                reader["variant_sku"]?.ToString(),
+
+                            BasePrice =
+                                reader["variant_baseprice"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["variant_baseprice"]),
+
+                            SalePrice =
+                                reader["variant_saleprice"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["variant_saleprice"]),
+
+                            MRP =
+                                reader["variant_mrp"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["variant_mrp"]),
+
+                            Stock =
+                                reader["variant_stock"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["variant_stock"]),
+
+                            Image =
+                                reader["variantimageurl"]?.ToString(),
+
+                            ItemType = "VARIANT"
+                        };
+                    }
+                    else
+                    {
+                        // Product Item
+
+                        wishlistItem.Item = new
+                        {
+                            Id =
+                                Convert.ToInt32(reader["productid"]),
 
                             Name =
                                 reader["productname"]?.ToString(),
@@ -396,52 +445,8 @@ ORDER BY w.createdat DESC";
                             ItemType = "PRODUCT"
                         };
                     }
-                    else
-                    {
-                        // VARIANT
 
-                        item.Item = new
-                        {
-                            Id =
-                                Convert.ToInt32(reader["variant_id"]),
-
-                            Name =
-                                reader["variantname"]?.ToString(),
-
-                            Slug =
-                                reader["variant_slug"]?.ToString(),
-
-                            SKU =
-                                reader["variant_sku"]?.ToString(),
-
-                            BasePrice =
-                                reader["variant_baseprice"] == DBNull.Value
-                                ? (decimal?)null
-                                : Convert.ToDecimal(reader["variant_baseprice"]),
-
-                            SalePrice =
-                                reader["variant_saleprice"] == DBNull.Value
-                                ? (decimal?)null
-                                : Convert.ToDecimal(reader["variant_saleprice"]),
-
-                            MRP =
-                                reader["variant_mrp"] == DBNull.Value
-                                ? (decimal?)null
-                                : Convert.ToDecimal(reader["variant_mrp"]),
-
-                            Stock =
-                                reader["variant_stock"] == DBNull.Value
-                                ? (int?)null
-                                : Convert.ToInt32(reader["variant_stock"]),
-
-                            Image =
-                                reader["variantimageurl"]?.ToString(),
-
-                            ItemType = "VARIANT"
-                        };
-                    }
-
-                    wishlist.Add(item);
+                    wishlist.Add(wishlistItem);
                 }
 
                 return new OkObjectResult(new
