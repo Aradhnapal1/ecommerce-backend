@@ -21,19 +21,40 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
             using var command = new NpgsqlCommand(@"
         SELECT
-            id,
-            userid,
-            ipaddress,
-            productid,
-            variantid,
-            quantity,
-            mrp,
-            saleprice,
-            totalprice,
-            createdat,
-            updatedat
-        FROM cart
-        ORDER BY id DESC;
+            c.id,
+            c.userid,
+            c.ipaddress,
+            c.productid,
+            c.variantid,
+            c.quantity,
+            c.mrp,
+            c.saleprice,
+            c.totalprice,
+            c.createdat,
+            c.updatedat,
+
+            -- PRODUCT
+            p.productname,
+            p.slug,
+            p.description,
+            p.productimageurl,
+            p.baseprice,
+            p.stock,
+
+            -- VARIANT
+            pv.variantname,
+            pv.sku,
+            pv.color,
+            pv.mrp AS variant_mrp,
+            pv.baseprice AS variant_baseprice,
+            pv.saleprice AS variant_saleprice,
+            pv.stock AS variant_stock,
+            pv.variantimageurl
+
+        FROM cart c
+        LEFT JOIN products p ON c.productid = p.id
+        LEFT JOIN product_variants pv ON c.variantid = pv.id
+        ORDER BY c.id DESC;
     ", connection);
 
             using var reader = await command.ExecuteReaderAsync();
@@ -42,30 +63,37 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             {
                 cartItems.Add(new CartModel
                 {
+                    // ================= CART =================
                     Id = Convert.ToInt32(reader["id"]),
-
-                    UserId = reader["userid"] == DBNull.Value
-                        ? null
-                        : Convert.ToInt32(reader["userid"]),
-
-                    IpAddress = reader["ipaddress"] == DBNull.Value
-                        ? null
-                        : reader["ipaddress"].ToString(),
-
-                    ProductId = reader["productid"] == DBNull.Value
-                        ? null
-                        : Convert.ToInt32(reader["productid"]),
-
-                    VariantId = reader["variantid"] == DBNull.Value
-                        ? null
-                        : Convert.ToInt32(reader["variantid"]),
-
+                    UserId = reader["userid"] == DBNull.Value ? null : Convert.ToInt32(reader["userid"]),
+                    IpAddress = reader["ipaddress"]?.ToString(),
+                    ProductId = reader["productid"] == DBNull.Value ? null : Convert.ToInt32(reader["productid"]),
+                    VariantId = reader["variantid"] == DBNull.Value ? null : Convert.ToInt32(reader["variantid"]),
                     Quantity = Convert.ToInt32(reader["quantity"]),
                     Mrp = Convert.ToDecimal(reader["mrp"]),
                     SalePrice = Convert.ToDecimal(reader["saleprice"]),
                     TotalPrice = Convert.ToDecimal(reader["totalprice"]),
                     CreatedAt = Convert.ToDateTime(reader["createdat"]),
-                    UpdatedAt = Convert.ToDateTime(reader["updatedat"])
+                    UpdatedAt = Convert.ToDateTime(reader["updatedat"]),
+
+                    // ================= PRODUCT =================
+                    ProductName = reader["productname"]?.ToString(),
+                    ProductSlug = reader["slug"]?.ToString(),
+                    ProductDescription = reader["description"]?.ToString(),
+                    ProductImageUrl = reader["productimageurl"]?.ToString(),
+                    ProductBasePrice = reader["baseprice"] == DBNull.Value ? null : Convert.ToDecimal(reader["baseprice"]),
+                    ProductStock = reader["stock"] == DBNull.Value ? null : Convert.ToInt32(reader["stock"]),
+
+                    // ================= VARIANT =================
+                    VariantName = reader["variantname"]?.ToString(),
+                    VariantSku = reader["sku"]?.ToString(),
+                    VariantColor = reader["color"]?.ToString(),
+                    VariantImageUrl = reader["variantimageurl"]?.ToString(),
+
+                    VariantMRP = reader["variant_mrp"] == DBNull.Value ? null : Convert.ToDecimal(reader["variant_mrp"]),
+                    VariantBasePrice = reader["variant_baseprice"] == DBNull.Value ? null : Convert.ToDecimal(reader["variant_baseprice"]),
+                    VariantSalePrice = reader["variant_saleprice"] == DBNull.Value ? null : Convert.ToDecimal(reader["variant_saleprice"]),
+                    VariantStock = reader["variant_stock"] == DBNull.Value ? null : Convert.ToInt32(reader["variant_stock"])
                 });
             }
 

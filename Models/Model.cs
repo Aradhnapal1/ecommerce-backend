@@ -291,6 +291,23 @@ namespace Ecommerce_Backend.Models
         public decimal SalePrice { get; set; }
 
         public decimal TotalPrice { get; set; }
+        public string? ProductName { get; set; }
+        public string? ProductSlug { get; set; }
+        public string? ProductDescription { get; set; }
+        public string? ProductImageUrl { get; set; }
+
+        public decimal? ProductBasePrice { get; set; }
+        public int? ProductStock { get; set; }
+
+        public string? VariantName { get; set; }
+        public string? VariantSku { get; set; }
+        public string? VariantColor { get; set; }
+        public string? VariantImageUrl { get; set; }
+
+        public decimal? VariantMRP { get; set; }
+        public decimal? VariantBasePrice { get; set; }
+        public decimal? VariantSalePrice { get; set; }
+        public int? VariantStock { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
 
