@@ -17,7 +17,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     public partial class DataBaseLayer : IDatabaseLayer
     {
         public async Task<IActionResult> AddWishlist(
-            [FromForm] WishlistModel wishlist)
+       [FromForm] WishlistModel wishlist)
         {
             try
             {
@@ -26,30 +26,66 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                 await con.OpenAsync();
 
-                // Guest Wishlist -> User Wishlist Migration
+                // =========================================
+                // Get ProductId From Variant
+                // =========================================
+
+                if (wishlist.VariantId != null)
+                {
+                    string variantQuery = @"
+                SELECT productid
+                FROM product_variants
+                WHERE id = @variantid";
+
+                    using var variantCmd =
+                        new NpgsqlCommand(
+                            variantQuery,
+                            con
+                        );
+
+                    variantCmd.Parameters.AddWithValue(
+                        "@variantid",
+                        wishlist.VariantId.Value
+                    );
+
+                    var productId =
+                        await variantCmd.ExecuteScalarAsync();
+
+                    if (productId == null)
+                    {
+                        return new BadRequestObjectResult(new
+                        {
+                            success = false,
+                            message = "Variant not found"
+                        });
+                    }
+
+                    wishlist.ProductId =
+                        Convert.ToInt32(productId);
+                }
+
+                // =========================================
+                // Guest Wishlist Migration
+                // =========================================
 
                 if (wishlist.UserId != null &&
                     !string.IsNullOrWhiteSpace(wishlist.IpAddress))
                 {
                     string migrateQuery = @"
-        UPDATE wishlist
-        SET
-            userid = @userid,
-            ipaddress = NULL
-        WHERE
-            productid = @productid
+                UPDATE wishlist
+                SET
+                    userid = @userid,
+                    ipaddress = NULL
+                WHERE
+                    productid = @productid
 
-            AND (
-                variantid = @variantid
-                OR
-                (
-                    variantid IS NULL
-                    AND @variantid IS NULL
-                )
-            )
+                    AND
+                    COALESCE(variantid,0)
+                    =
+                    COALESCE(@variantid,0)
 
-            AND ipaddress = @ipaddress
-            AND userid IS NULL";
+                    AND ipaddress = @ipaddress
+                    AND userid IS NULL";
 
                     using var migrateCmd =
                         new NpgsqlCommand(
@@ -91,27 +127,27 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     }
                 }
 
+                // =========================================
                 // Duplicate Check
+                // =========================================
 
                 string checkQuery = @"
-                    SELECT COUNT(*)
-                    FROM wishlist
-                    WHERE productid = @productid
+            SELECT COUNT(*)
+            FROM wishlist
+            WHERE
+                productid = @productid
 
-                    AND (
-                        variantid = @variantid
-                        OR
-                        (
-                            variantid IS NULL
-                            AND @variantid IS NULL
-                        )
-                    )
+                AND
+                COALESCE(variantid,0)
+                =
+                COALESCE(@variantid,0)
 
-                    AND (
-                        userid = @userid
-                        OR
-                        ipaddress = @ipaddress
-                    )";
+                AND
+                (
+                    userid = @userid
+                    OR
+                    ipaddress = @ipaddress
+                )";
 
                 using var checkCmd =
                     new NpgsqlCommand(
@@ -142,39 +178,42 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     (object)DBNull.Value
                 );
 
-                int count = Convert.ToInt32(
-                    await checkCmd.ExecuteScalarAsync()
-                );
+                int count =
+                    Convert.ToInt32(
+                        await checkCmd.ExecuteScalarAsync()
+                    );
 
                 if (count > 0)
                 {
                     return new OkObjectResult(new
                     {
                         success = false,
-                        message = "Product already exists in wishlist"
+                        message = "Item already exists in wishlist"
                     });
                 }
 
+                // =========================================
                 // Insert Wishlist
+                // =========================================
 
                 string insertQuery = @"
-                    INSERT INTO wishlist
-                    (
-                        userid,
-                        productid,
-                        variantid,
-                        ipaddress,
-                        createdat
-                    )
-                    VALUES
-                    (
-                        @userid,
-                        @productid,
-                        @variantid,
-                        @ipaddress,
-                        NOW()
-                    )
-                    RETURNING id";
+            INSERT INTO wishlist
+            (
+                userid,
+                productid,
+                variantid,
+                ipaddress,
+                createdat
+            )
+            VALUES
+            (
+                @userid,
+                @productid,
+                @variantid,
+                @ipaddress,
+                NOW()
+            )
+            RETURNING id";
 
                 using var insertCmd =
                     new NpgsqlCommand(
@@ -211,8 +250,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 return new OkObjectResult(new
                 {
                     success = true,
-                    message = "Product added to wishlist successfully",
-                    wishlistId = wishlistId
+                    message = "Item added to wishlist successfully",
+                    wishlistId
                 });
             }
             catch (Exception ex)
@@ -220,19 +259,22 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 return new ObjectResult(new
                 {
                     success = false,
-                    message = ex.Message
+                    message = ex.Message,
+                    innerException =
+                        ex.InnerException?.Message
                 })
                 {
                     StatusCode = 500
                 };
             }
         }
+
+
         public async Task<IActionResult> GetWishlist()
         {
             try
             {
-                var wishlist =
-                    new List<WishlistModel>();
+                var wishlist = new List<WishlistModel>();
 
                 using var con =
                     new NpgsqlConnection(DbConnection);
@@ -276,157 +318,127 @@ LEFT JOIN product_variants pv
 ORDER BY w.createdat DESC";
 
                 using var cmd =
-                    new NpgsqlCommand(
-                        query,
-                        con
-                    );
+                    new NpgsqlCommand(query, con);
 
                 using var reader =
                     await cmd.ExecuteReaderAsync();
 
                 while (await reader.ReadAsync())
                 {
-                    var item =
-                        new WishlistModel
+                    var item = new WishlistModel
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+
+                        UserId =
+                            reader["userid"] == DBNull.Value
+                            ? null
+                            : Convert.ToInt32(reader["userid"]),
+
+                        ProductId =
+                            Convert.ToInt32(reader["productid"]),
+
+                        VariantId =
+                            reader["variantid"] == DBNull.Value
+                            ? null
+                            : Convert.ToInt32(reader["variantid"]),
+
+                        IpAddress =
+                            reader["ipaddress"]?.ToString(),
+
+                        CreatedAt =
+                            Convert.ToDateTime(reader["createdat"])
+                    };
+
+                    // PRODUCT
+                    if (item.VariantId == null)
+                    {
+                        item.Item = new
+                        {
+                            Id = Convert.ToInt32(reader["productid"]),
+
+                            Name =
+                                reader["productname"]?.ToString(),
+
+                            Slug =
+                                reader["product_slug"]?.ToString(),
+
+                            SKU =
+                                reader["sku"]?.ToString(),
+
+                            CategoryId =
+                                reader["categoryid"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["categoryid"]),
+
+                            BasePrice =
+                                reader["baseprice"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["baseprice"]),
+
+                            SalePrice =
+                                reader["saleprice"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["saleprice"]),
+
+                            MRP =
+                                reader["mrp"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["mrp"]),
+
+                            Stock =
+                                reader["stock"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["stock"]),
+
+                            Image =
+                                reader["productimageurl"]?.ToString(),
+
+                            ItemType = "PRODUCT"
+                        };
+                    }
+                    else
+                    {
+                        // VARIANT
+
+                        item.Item = new
                         {
                             Id =
-                                Convert.ToInt32(
-                                    reader["id"]
-                                ),
+                                Convert.ToInt32(reader["variant_id"]),
 
-                            UserId =
-                                reader["userid"] == DBNull.Value
-                                ? null
-                                : Convert.ToInt32(
-                                    reader["userid"]
-                                ),
+                            Name =
+                                reader["variantname"]?.ToString(),
 
-                            ProductId =
-                                Convert.ToInt32(
-                                    reader["productid"]
-                                ),
+                            Slug =
+                                reader["variant_slug"]?.ToString(),
 
-                            VariantId =
-                                reader["variantid"] == DBNull.Value
-                                ? null
-                                : Convert.ToInt32(
-                                    reader["variantid"]
-                                ),
+                            SKU =
+                                reader["variant_sku"]?.ToString(),
 
-                            IpAddress =
-                                reader["ipaddress"]?.ToString(),
+                            BasePrice =
+                                reader["variant_baseprice"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["variant_baseprice"]),
 
-                            CreatedAt =
-                                Convert.ToDateTime(
-                                    reader["createdat"]
-                                ),
+                            SalePrice =
+                                reader["variant_saleprice"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["variant_saleprice"]),
 
-                            Product =
-                                new ProductModel
-                                {
-                                    Id =
-                                        Convert.ToInt32(
-                                            reader["productid"]
-                                        ),
+                            MRP =
+                                reader["variant_mrp"] == DBNull.Value
+                                ? (decimal?)null
+                                : Convert.ToDecimal(reader["variant_mrp"]),
 
-                                    ProductName =
-                                        reader["productname"]
-                                        ?.ToString(),
+                            Stock =
+                                reader["variant_stock"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["variant_stock"]),
 
-                                    SKU =
-                                        reader["sku"]
-                                        ?.ToString(),
+                            Image =
+                                reader["variantimageurl"]?.ToString(),
 
-                                    CategoryId =
-                                        reader["categoryid"] == DBNull.Value
-                                        ? null
-                                        : Convert.ToInt32(
-                                            reader["categoryid"]
-                                        ),
-
-                                    BasePrice =
-                                        reader["baseprice"] == DBNull.Value
-                                        ? null
-                                        : Convert.ToDecimal(
-                                            reader["baseprice"]
-                                        ),
-
-                                    SalePrice =
-                                        reader["saleprice"] == DBNull.Value
-                                        ? null
-                                        : Convert.ToDecimal(
-                                            reader["saleprice"]
-                                        ),
-
-                                    MRP =
-                                        reader["mrp"] == DBNull.Value
-                                        ? 0
-                                        : Convert.ToDecimal(
-                                            reader["mrp"]
-                                        ),
-
-                                    Stock =
-                                        reader["stock"] == DBNull.Value
-                                        ? 0
-                                        : Convert.ToInt32(
-                                            reader["stock"]
-                                        ),
-
-                                    ProductImageUrl =
-                                        reader["productimageurl"]
-                                        ?.ToString()
-                                }
+                            ItemType = "VARIANT"
                         };
-
-                    if (item.VariantId != null)
-                    {
-                        item.Variant =
-                            new ProductVariantModel
-                            {
-                                Id =
-                                    Convert.ToInt32(
-                                        reader["variant_id"]
-                                    ),
-
-                                ProductId =
-                                    item.ProductId,
-
-                                SKU =
-                                    reader["variant_sku"]
-                                    ?.ToString(),
-
-                                BasePrice =
-                                    reader["variant_baseprice"] == DBNull.Value
-                                    ? null
-                                    : Convert.ToDecimal(
-                                        reader["variant_baseprice"]
-                                    ),
-
-                                SalePrice =
-                                    reader["variant_saleprice"] == DBNull.Value
-                                    ? null
-                                    : Convert.ToDecimal(
-                                        reader["variant_saleprice"]
-                                    ),
-
-                                MRP =
-                                    reader["variant_mrp"] == DBNull.Value
-                                    ? null
-                                    : Convert.ToDecimal(
-                                        reader["variant_mrp"]
-                                    ),
-
-                                Stock =
-                                    reader["variant_stock"] == DBNull.Value
-                                    ? 0
-                                    : Convert.ToInt32(
-                                        reader["variant_stock"]
-                                    ),
-
-                                VariantImageUrl =
-                                    reader["variantimageurl"]
-                                    ?.ToString()
-                            };
                     }
 
                     wishlist.Add(item);
@@ -445,8 +457,7 @@ ORDER BY w.createdat DESC";
                 {
                     success = false,
                     message = ex.Message,
-                    innerException =
-                        ex.InnerException?.Message
+                    innerException = ex.InnerException?.Message
                 })
                 {
                     StatusCode = 500

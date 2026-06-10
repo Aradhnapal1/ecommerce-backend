@@ -278,10 +278,8 @@ namespace Ecommerce_Backend.Models
 
         public string? IpAddress { get; set; }
 
-        public ProductModel? Product { get; set; }
+        public DateTime CreatedAt { get; set; }
 
-        public ProductVariantModel? Variant { get; set; }
-
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public object? Item { get; set; }
     }
 }
