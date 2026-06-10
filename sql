@@ -222,3 +222,35 @@ CREATE TABLE coupons (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 );
+
+
+CREATE TABLE cart (
+    id SERIAL PRIMARY KEY,
+
+    userid INT NOT NULL,
+
+    productid INT NOT NULL,
+
+    variantid INT NULL,
+
+    quantity INT NOT NULL DEFAULT 1,
+
+    mrp NUMERIC(10,2) NOT NULL,
+
+    saleprice NUMERIC(10,2) NOT NULL,
+
+    totalprice NUMERIC(10,2) NOT NULL,
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_cart_product
+        FOREIGN KEY (productid)
+        REFERENCES products(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_cart_variant
+        FOREIGN KEY (variantid)
+        REFERENCES product_variants(id)
+        ON DELETE CASCADE
+);
