@@ -90,111 +90,74 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 decimal mrp = 0;
                 decimal salePrice = 0;
 
-                // GET PRICE
+                // Fetch MRP and SalePrice
                 if (cartItem.VariantId.HasValue)
                 {
                     using var cmd = new NpgsqlCommand(@"
-                SELECT mrp, saleprice FROM product_variants WHERE id = @id", connection);
-
+                SELECT mrp, saleprice 
+                FROM product_variants 
+                WHERE id = @id", connection);
                     cmd.Parameters.AddWithValue("@id", cartItem.VariantId.Value);
-
                     using var reader = await cmd.ExecuteReaderAsync();
                     if (!await reader.ReadAsync())
+                    {
                         return new BadRequestObjectResult(new { success = false, message = "Invalid VariantId" });
-
+                    }
                     mrp = Convert.ToDecimal(reader["mrp"]);
                     salePrice = Convert.ToDecimal(reader["saleprice"]);
                 }
                 else if (cartItem.ProductId.HasValue)
                 {
                     using var cmd = new NpgsqlCommand(@"
-                SELECT mrp, saleprice FROM products WHERE id = @id", connection);
-
+                SELECT mrp, saleprice 
+                FROM products 
+                WHERE id = @id", connection);
                     cmd.Parameters.AddWithValue("@id", cartItem.ProductId.Value);
-
                     using var reader = await cmd.ExecuteReaderAsync();
                     if (!await reader.ReadAsync())
+                    {
                         return new BadRequestObjectResult(new { success = false, message = "Invalid ProductId" });
-
+                    }
                     mrp = Convert.ToDecimal(reader["mrp"]);
                     salePrice = Convert.ToDecimal(reader["saleprice"]);
                 }
                 else
                 {
-                    return new BadRequestObjectResult(new
-                    {
-                        success = false,
-                        message = "ProductId or VariantId is required"
-                    });
+                    return new BadRequestObjectResult(new { success = false, message = "ProductId or VariantId is required" });
                 }
 
                 decimal totalPrice = salePrice * cartItem.Quantity;
 
-                // 🔥 CHECK EXISTING CART ITEM
-                using var checkCmd = new NpgsqlCommand(@"
-            SELECT id, quantity
-            FROM cart
-            WHERE 
-                (userid = @userid OR ipaddress = @ipaddress)
-                AND productid = @productid
-                AND variantid IS NOT DISTINCT FROM @variantid
-            LIMIT 1;
-        ", connection);
+                // Insert Query (Clean)
+                using var insertCmd = new NpgsqlCommand(@"
+            INSERT INTO cart 
+            (
+                userid, ipaddress, productid, variantid, quantity, 
+                mrp, saleprice, totalprice, createdat, updatedat
+            )
+            VALUES 
+            (
+                @userid, @ipaddress, @productid, @variantid, @quantity, 
+                @mrp, @saleprice, @totalprice, @createdat, @updatedat
+            )", connection);
 
-                checkCmd.Parameters.AddWithValue("@userid", (object?)cartItem.UserId ?? DBNull.Value);
-                checkCmd.Parameters.AddWithValue("@ipaddress", (object?)cartItem.IpAddress ?? DBNull.Value);
-                checkCmd.Parameters.AddWithValue("@productid", (object?)cartItem.ProductId ?? DBNull.Value);
-                checkCmd.Parameters.AddWithValue("@variantid", (object?)cartItem.VariantId ?? DBNull.Value);
+                insertCmd.Parameters.AddWithValue("@userid", (object?)cartItem.UserId ?? DBNull.Value);
+                insertCmd.Parameters.AddWithValue("@ipaddress", (object?)cartItem.IpAddress ?? DBNull.Value);
+                insertCmd.Parameters.AddWithValue("@productid", (object?)cartItem.ProductId ?? DBNull.Value);
+                insertCmd.Parameters.AddWithValue("@variantid", (object?)cartItem.VariantId ?? DBNull.Value);
+                insertCmd.Parameters.AddWithValue("@quantity", cartItem.Quantity);
+                insertCmd.Parameters.AddWithValue("@mrp", mrp);
+                insertCmd.Parameters.AddWithValue("@saleprice", salePrice);
+                insertCmd.Parameters.AddWithValue("@totalprice", totalPrice);
+                insertCmd.Parameters.AddWithValue("@createdat", DateTime.UtcNow);
+                insertCmd.Parameters.AddWithValue("@updatedat", DateTime.UtcNow);
 
-                var existing = await checkCmd.ExecuteReaderAsync();
-
-                if (await existing.ReadAsync())
-                {
-                    int existingId = Convert.ToInt32(existing["id"]);
-                    int qty = Convert.ToInt32(existing["quantity"]);
-                    existing.Close();
-
-                    using var updateCmd = new NpgsqlCommand(@"
-                UPDATE cart
-                SET quantity = @quantity,
-                    totalprice = @totalprice,
-                    updatedat = NOW()
-                WHERE id = @id;
-            ", connection);
-
-                    updateCmd.Parameters.AddWithValue("@quantity", qty + cartItem.Quantity);
-                    updateCmd.Parameters.AddWithValue("@totalprice", salePrice * (qty + cartItem.Quantity));
-                    updateCmd.Parameters.AddWithValue("@id", existingId);
-
-                    await updateCmd.ExecuteNonQueryAsync();
-                }
-                else
-                {
-                    existing.Close();
-
-                    using var insertCmd = new NpgsqlCommand(@"
-                INSERT INTO cart 
-                (userid, ipaddress, productid, variantid, quantity, mrp, saleprice, totalprice, createdat, updatedat)
-                VALUES
-                (@userid, @ipaddress, @productid, @variantid, @quantity, @mrp, @saleprice, @totalprice, NOW(), NOW());
-            ", connection);
-
-                    insertCmd.Parameters.AddWithValue("@userid", (object?)cartItem.UserId ?? DBNull.Value);
-                    insertCmd.Parameters.AddWithValue("@ipaddress", (object?)cartItem.IpAddress ?? DBNull.Value);
-                    insertCmd.Parameters.AddWithValue("@productid", (object?)cartItem.ProductId ?? DBNull.Value);
-                    insertCmd.Parameters.AddWithValue("@variantid", (object?)cartItem.VariantId ?? DBNull.Value);
-                    insertCmd.Parameters.AddWithValue("@quantity", cartItem.Quantity);
-                    insertCmd.Parameters.AddWithValue("@mrp", mrp);
-                    insertCmd.Parameters.AddWithValue("@saleprice", salePrice);
-                    insertCmd.Parameters.AddWithValue("@totalprice", totalPrice);
-
-                    await insertCmd.ExecuteNonQueryAsync();
-                }
+                await insertCmd.ExecuteNonQueryAsync();
 
                 return new OkObjectResult(new
                 {
                     success = true,
-                    message = "Cart updated successfully"
+                    message = "Item added to cart successfully"
                 });
             }
             catch (Exception ex)
@@ -206,5 +169,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 });
             }
         }
+
     }
 }

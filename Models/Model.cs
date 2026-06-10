@@ -266,18 +266,18 @@ namespace Ecommerce_Backend.Models
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
 
-<<<<<<< HEAD
+
+
 
 
     public class CartModel
-=======
-    public class WishlistModel
->>>>>>> dba7e7bb2782790a09c4d45115c2d9cb20b199d7
     {
+
+      
         public int Id { get; set; }
 
         public int? UserId { get; set; }
-<<<<<<< HEAD
+
         public string? IpAddress { get; set; }
 
         public int? ProductId { get; set; }
@@ -302,9 +302,12 @@ namespace Ecommerce_Backend.Models
 
 
 
+    public class WishlistModel
 
-=======
+    {
 
+        public int Id { get; set; }
+        public int? UserId { get; set; }
         public int ProductId { get; set; }
 
         public int? VariantId { get; set; }
@@ -317,5 +320,5 @@ namespace Ecommerce_Backend.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
->>>>>>> dba7e7bb2782790a09c4d45115c2d9cb20b199d7
+
 }
