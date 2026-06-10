@@ -265,4 +265,23 @@ namespace Ecommerce_Backend.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
+
+    public class WishlistModel
+    {
+        public int Id { get; set; }
+
+        public int? UserId { get; set; }
+
+        public int ProductId { get; set; }
+
+        public int? VariantId { get; set; }
+
+        public string? IpAddress { get; set; }
+
+        public ProductModel? Product { get; set; }
+
+        public ProductVariantModel? Variant { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
 }

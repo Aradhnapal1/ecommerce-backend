@@ -97,6 +97,7 @@ builder.Services.Configure<CloudinarySettings>(
     builder.Configuration.GetSection("CloudinarySettings"));
 
 builder.Services.AddScoped<CloudinaryService>();
+builder.Services.AddHttpContextAccessor();
 
 
 // =========================
