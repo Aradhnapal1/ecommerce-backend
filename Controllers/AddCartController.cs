@@ -117,5 +117,30 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer
                 .DeleteCartItem(id);
         }
+
+
+        [HttpDelete("clear")]
+        public async Task<IActionResult> ClearCart()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+
+            int? userId = null;
+            string? ipAddress = null;
+
+            if (userIdClaim != null)
+            {
+                userId = Convert.ToInt32(userIdClaim.Value);
+            }
+            else
+            {
+                ipAddress =
+                    Request.Headers["X-Forwarded-For"]
+                    .FirstOrDefault()
+                    ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+            }
+
+            return await _businessLayer.ClearCart(userId, ipAddress);
+        }
+
     }
 }

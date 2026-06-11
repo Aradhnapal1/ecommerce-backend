@@ -19,6 +19,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             UpdateCartQuantityModel model
         );
         Task<IActionResult> DeleteCartItem(int id);
+        Task<IActionResult> ClearCart(int? userId, string? ipAddress);
 
     }
 
@@ -799,5 +800,64 @@ WHERE id = @cartid";
                 };
             }
         }
+
+        public async Task<IActionResult> ClearCart(int? userId, string? ipAddress)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                string query;
+
+                if (userId.HasValue)
+                {
+                    query = @"
+DELETE FROM addcart
+WHERE userid = @userid";
+                }
+                else
+                {
+                    query = @"
+DELETE FROM addcart
+WHERE ipaddress = @ipaddress";
+                }
+
+                using var cmd = new NpgsqlCommand(query, con);
+
+                if (userId.HasValue)
+                {
+                    cmd.Parameters.AddWithValue("@userid", userId.Value);
+                }
+                else
+                {
+                    cmd.Parameters.AddWithValue("@ipaddress", ipAddress ?? "");
+                }
+
+                int rows = await cmd.ExecuteNonQueryAsync();
+
+                return new OkObjectResult(new
+                {
+                    success = true,
+                    message = "Cart cleared successfully",
+                    deletedRows = rows
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = ex.Message,
+                    innerException = ex.InnerException?.Message
+                })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
+
+
+
     }
 }
