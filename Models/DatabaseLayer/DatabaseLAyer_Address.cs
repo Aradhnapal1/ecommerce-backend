@@ -12,6 +12,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> GetAddressList(
     int userId
 );
+
+        Task<IActionResult> DeleteAddress(int id, int userId);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -347,5 +349,63 @@ ORDER BY
                 };
             }
         }
+
+
+
+        public async Task<IActionResult> DeleteAddress(int id, int userId)
+        {
+            try
+            {
+                using var con =
+                    new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+                string query = @"
+                    DELETE FROM user_addresses
+                    WHERE id = @id AND userid = @userid
+                ";
+
+                using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@id", id);
+                cmd.Parameters.AddWithValue("@userid", userId);
+
+                var result = await cmd.ExecuteNonQueryAsync();
+                if (result > 0)
+                {
+                    return new OkObjectResult(new
+                    {
+                        success = true,
+                        message = "Address deleted successfully."
+                    });
+                }
+                return new NotFoundObjectResult(new
+                {
+                    success = false,
+                    message = "Address not found."
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = ex.Message,
+                    innerException =
+                        ex.InnerException?.Message
+                })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
+
+
+
+
+
+
+
+
+
+
     }
 }

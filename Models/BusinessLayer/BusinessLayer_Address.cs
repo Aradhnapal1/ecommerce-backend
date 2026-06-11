@@ -9,8 +9,10 @@ namespace Ecommerce_Backend.Models.BusinessLayer
           int userId
       );
         Task<IActionResult> GetAddressList(
-    int userId
-);
+                int userId
+               );
+
+        Task<IActionResult> DeleteAddress(int id, int userId);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -27,6 +29,12 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             return await _databaseLayer
                 .GetAddressList(userId);
+        }
+
+
+        public async Task<IActionResult> DeleteAddress(int id, int userId)
+        {
+            return await _databaseLayer.DeleteAddress(id, userId);
         }
     }
 

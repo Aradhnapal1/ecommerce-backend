@@ -51,5 +51,20 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer
                 .GetAddressList(userId);
         }
+
+
+        [HttpDelete("delete/{id}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteAddress(int id)
+        {
+            int userId =
+                Convert.ToInt32(
+                    User.FindFirst(
+                        ClaimTypes.NameIdentifier
+                    )?.Value
+                );
+            return await _businessLayer
+                .DeleteAddress(id, userId);
+        }
     }
 }
