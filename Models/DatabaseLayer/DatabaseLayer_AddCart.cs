@@ -14,9 +14,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     int? userId,
     string? ipAddress
 );
+        // Interface mein add karo
         Task<IActionResult> UpdateCartQuantity(
-    UpdateCartQuantityModel model
-);
+            UpdateCartQuantityModel model
+        );
+
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -562,6 +564,7 @@ WHERE ";
             }
         }
 
+        // Implementation
         public async Task<IActionResult> UpdateCartQuantity(
             UpdateCartQuantityModel model)
         {
@@ -572,48 +575,98 @@ WHERE ";
 
                 await con.OpenAsync();
 
-                string checkQuery = @"
+                // ====================================
+                // Ownership + Current Quantity Fetch
+                // ====================================
+
+                string ownerCheckQuery;
+
+                if (model.UserId.HasValue)
+                {
+                    ownerCheckQuery = @"
 SELECT quantity
 FROM addcart
-WHERE id = @id";
+WHERE
+    id      = @cartid
+    AND userid = @userid
+LIMIT 1";
+                }
+                else
+                {
+                    ownerCheckQuery = @"
+SELECT quantity
+FROM addcart
+WHERE
+    id        = @cartid
+    AND ipaddress = @ipaddress
+LIMIT 1";
+                }
 
-                using var checkCmd =
+                using var ownerCmd =
                     new NpgsqlCommand(
-                        checkQuery,
+                        ownerCheckQuery,
                         con
                     );
 
-                checkCmd.Parameters.AddWithValue(
-                    "@id",
+                ownerCmd.Parameters.AddWithValue(
+                    "@cartid",
                     model.CartId
                 );
 
-                var qtyObj =
-                    await checkCmd.ExecuteScalarAsync();
-
-                if (qtyObj == null)
+                if (model.UserId.HasValue)
                 {
-                    return new NotFoundObjectResult(new
-                    {
-                        success = false,
-                        cartId = model.CartId,
-                        message = "Cart item not found"
-                    });
+                    ownerCmd.Parameters.AddWithValue(
+                        "@userid",
+                        model.UserId.Value
+                    );
+                }
+                else
+                {
+                    ownerCmd.Parameters.AddWithValue(
+                        "@ipaddress",
+                        model.IpAddress ?? ""
+                    );
                 }
 
+                var currentQtyObj =
+                    await ownerCmd
+                    .ExecuteScalarAsync();
+
+                // ====================================
+                // Cart row mila hi nahi
+                // ====================================
+
+                if (currentQtyObj == null)
+                {
+                    return new NotFoundObjectResult(
+                        new
+                        {
+                            success = false,
+                            message =
+                                "Cart item not found " +
+                                "or access denied"
+                        });
+                }
+
+                // ====================================
+                // Final Quantity Calculate karo
+                // ====================================
+
                 int currentQty =
-                    Convert.ToInt32(
-                        qtyObj
-                    );
+                    Convert.ToInt32(currentQtyObj);
 
-                int newQty =
-                    currentQty + model.Action;
+                int finalQty =
+                    currentQty + model.Quantity;
 
-                if (newQty <= 0)
+                // ====================================
+                // Final Quantity 0 ya kam → DELETE
+                // ====================================
+
+                if (finalQty <= 0)
                 {
                     string deleteQuery = @"
 DELETE FROM addcart
-WHERE id = @id";
+WHERE id = @cartid";
 
                     using var deleteCmd =
                         new NpgsqlCommand(
@@ -622,28 +675,33 @@ WHERE id = @id";
                         );
 
                     deleteCmd.Parameters.AddWithValue(
-                        "@id",
+                        "@cartid",
                         model.CartId
                     );
 
-                    await deleteCmd.ExecuteNonQueryAsync();
+                    await deleteCmd
+                        .ExecuteNonQueryAsync();
 
-                    return new OkObjectResult(new
-                    {
-                        success = true,
-                        deleted = true,
-                        quantity = 0,
-                        message = "Item removed from cart"
-                    });
+                    return new OkObjectResult(
+                        new
+                        {
+                            success = true,
+                            message = "Item removed from cart",
+                            cartId = model.CartId,
+                            quantity = 0
+                        });
                 }
+
+                // ====================================
+                // Quantity UPDATE karo
+                // ====================================
 
                 string updateQuery = @"
 UPDATE addcart
 SET
-    quantity = @qty,
+    quantity  = @finalqty,
     updatedat = NOW()
-WHERE id = @id
-RETURNING quantity";
+WHERE id = @cartid";
 
                 using var updateCmd =
                     new NpgsqlCommand(
@@ -652,44 +710,43 @@ RETURNING quantity";
                     );
 
                 updateCmd.Parameters.AddWithValue(
-                    "@qty",
-                    newQty
+                    "@finalqty",
+                    finalQty
                 );
 
                 updateCmd.Parameters.AddWithValue(
-                    "@id",
+                    "@cartid",
                     model.CartId
                 );
 
-                var updatedQty =
-                    await updateCmd.ExecuteScalarAsync();
+                await updateCmd
+                    .ExecuteNonQueryAsync();
 
-                return new OkObjectResult(new
-                {
-                    success = true,
-                    deleted = false,
-                    cartId = model.CartId,
-                    quantity = Convert.ToInt32(updatedQty),
-                    message =
-                        model.Action > 0
-                        ? "Quantity increased"
-                        : "Quantity decreased"
-                });
+                return new OkObjectResult(
+                    new
+                    {
+                        success = true,
+                        message = "Cart quantity updated",
+                        cartId = model.CartId,
+                        quantity = finalQty  // ← sahi final value
+                    });
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new
-                {
-                    success = false,
-                    message = ex.Message,
-                    innerException =
-                        ex.InnerException?.Message
-                })
+                return new ObjectResult(
+                    new
+                    {
+                        success = false,
+                        message = ex.Message,
+                        innerException =
+                            ex.InnerException?.Message
+                    })
                 {
                     StatusCode = 500
                 };
             }
         }
+
     }
 }
    

@@ -8,10 +8,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             [FromForm] AddCartModel cart
         );
         Task<IActionResult> GetCart(int? userId, string? ipAddress);
-
         Task<IActionResult> UpdateCartQuantity(
     UpdateCartQuantityModel model
 );
+
+
 
     }
     public partial class BusinessLayer : IBusinessLayer
@@ -34,8 +35,9 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 );
         }
 
+        // Implementation
         public async Task<IActionResult> UpdateCartQuantity(
-    UpdateCartQuantityModel model)
+            UpdateCartQuantityModel model)
         {
             return await _databaseLayer
                 .UpdateCartQuantity(model);

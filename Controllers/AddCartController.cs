@@ -79,14 +79,35 @@ namespace Ecommerce_Backend.Controllers
                 );
         }
 
-        [HttpPost("update-quantity")]
-        public async Task<IActionResult> UpdateQuantity(
+
+        [HttpPut("update-quantity")]
+        public async Task<IActionResult> UpdateCartQuantity(
     [FromForm] UpdateCartQuantityModel model)
         {
+            var userIdClaim =
+                User.FindFirst(
+                    ClaimTypes.NameIdentifier
+                );
+
+            model.IpAddress =
+                Request.Headers["X-Forwarded-For"]
+                .FirstOrDefault()
+                ??
+                HttpContext.Connection
+                .RemoteIpAddress
+                ?.ToString();
+
+            if (userIdClaim != null)
+            {
+                model.UserId =
+                    Convert.ToInt32(
+                        userIdClaim.Value
+                    );
+            }
+
             return await _businessLayer
                 .UpdateCartQuantity(model);
         }
-
 
     }
 }

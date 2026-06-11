@@ -312,11 +312,14 @@ namespace Ecommerce_Backend.Models
         public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
 
+
+
     public class UpdateCartQuantityModel
     {
         public int CartId { get; set; }
-
-        public int Action { get; set; }
+        public int Quantity { get; set; }
+        public int? UserId { get; set; }
+        public string? IpAddress { get; set; }
     }
 
 }
