@@ -326,4 +326,43 @@ namespace Ecommerce_Backend.Models
     {
         public string CouponCode { get; set; }
     }
+    public class UserAddressModel
+    {
+        public int Id { get; set; }
+
+        public string FullName { get; set; }
+
+        public string Mobile { get; set; }
+
+        public string? AlternateMobile { get; set; }
+
+        public string AddressLine1 { get; set; }
+
+        public string? AddressLine2 { get; set; }
+
+        public string? Landmark { get; set; }
+
+        public string City { get; set; }
+
+        public string State { get; set; }
+
+        public string Country { get; set; } = "India";
+
+        public string Pincode { get; set; }
+
+        public string AddressType { get; set; } = "HOME";
+
+        public bool IsDefault { get; set; }
+    }
+
+    public class CreateOrderModel
+    {
+        public int UserId { get; set; }
+
+        public int AddressId { get; set; }
+
+        public string PaymentMethod { get; set; }
+
+        public string? CouponCode { get; set; }
+    }
 }
