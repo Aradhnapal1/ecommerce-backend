@@ -40,7 +40,41 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.DeleteCoupon(id);
         }
 
-        
+        [HttpPost("apply")]
+        public async Task<IActionResult> ApplyCoupon(
+    [FromForm] ApplyCouponModel model)
+        {
+            int? userId = null;
+            string? ipAddress = null;
+
+            var userClaim =
+                User.FindFirst(
+                    System.Security.Claims.ClaimTypes.NameIdentifier
+                );
+
+            if (userClaim != null)
+            {
+                userId =
+                    Convert.ToInt32(
+                        userClaim.Value
+                    );
+            }
+            else
+            {
+                ipAddress =
+                    HttpContext.Connection
+                    .RemoteIpAddress?
+                    .ToString();
+            }
+
+            return await _businessLayer
+                .ApplyCoupon(
+                    model,
+                    userId,
+                    ipAddress
+                );
+        }
+
     }
 
 }

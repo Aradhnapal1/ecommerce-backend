@@ -209,7 +209,6 @@ CREATE TABLE coupons (
 
     min_order_amount DECIMAL(10,2) DEFAULT 0,
 
-    max_discount DECIMAL(10,2),
 
     usage_limit INTEGER DEFAULT 1,
 

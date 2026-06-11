@@ -9,6 +9,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> AddCoupon([FromBody] CouponModel coupon);
         Task<IActionResult> EditCoupun(int id, [FromBody] CouponModel coupon);
         Task<IActionResult> DeleteCoupon(int id);
+        Task<IActionResult> ApplyCoupon(ApplyCouponModel model,int? userId,string? ipAddress);
     }
     public partial class  BusinessLayer : IBusinessLayer
     {
@@ -35,6 +36,14 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             var result = await _databaseLayer.DeleteCoupon(id);
             return result;
         }
-       
+        public async Task<IActionResult> ApplyCoupon( ApplyCouponModel model, int? userId,string? ipAddress)
+        {
+            return await _databaseLayer
+                .ApplyCoupon(
+                    model,
+                    userId,
+                    ipAddress
+                );
+        }
     }
 }

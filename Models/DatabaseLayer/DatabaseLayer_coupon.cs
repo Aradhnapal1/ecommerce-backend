@@ -9,6 +9,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> AddCoupon([FromBody] CouponModel coupon);
         Task<IActionResult> EditCoupun(int id, [FromBody] CouponModel coupon);
         Task<IActionResult> DeleteCoupon(int id);
+        Task<IActionResult> ApplyCoupon(ApplyCouponModel model, int? userId, string? ipAddress);
+
     }
 
 
@@ -305,5 +307,282 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 });
             }
         }
-}
+
+        public async Task<IActionResult> ApplyCoupon(
+    ApplyCouponModel model,
+    int? userId,
+    string? ipAddress)
+        {
+            try
+            {
+                using var con =
+                    new NpgsqlConnection(
+                        DbConnection
+                    );
+
+                await con.OpenAsync();
+
+                // ==========================
+                // Cart Grand Total
+                // ==========================
+
+                string cartQuery;
+
+                if (userId.HasValue)
+                {
+                    cartQuery = @"
+SELECT
+COALESCE(
+SUM(
+    ac.quantity *
+    COALESCE(
+        pv.saleprice,
+        p.saleprice
+    )
+),0)
+FROM addcart ac
+INNER JOIN products p
+ON p.id = ac.productid
+LEFT JOIN product_variants pv
+ON pv.id = ac.variantid
+WHERE ac.userid = @userid";
+                }
+                else
+                {
+                    cartQuery = @"
+SELECT
+COALESCE(
+SUM(
+    ac.quantity *
+    COALESCE(
+        pv.saleprice,
+        p.saleprice
+    )
+),0)
+FROM addcart ac
+INNER JOIN products p
+ON p.id = ac.productid
+LEFT JOIN product_variants pv
+ON pv.id = ac.variantid
+WHERE ac.ipaddress = @ipaddress";
+                }
+
+                using var cartCmd =
+                    new NpgsqlCommand(
+                        cartQuery,
+                        con
+                    );
+
+                if (userId.HasValue)
+                {
+                    cartCmd.Parameters.AddWithValue(
+                        "@userid",
+                        userId.Value
+                    );
+                }
+                else
+                {
+                    cartCmd.Parameters.AddWithValue(
+                        "@ipaddress",
+                        ipAddress ?? ""
+                    );
+                }
+
+                decimal grandTotal =
+                    Convert.ToDecimal(
+                        await cartCmd.ExecuteScalarAsync()
+                    );
+
+                if (grandTotal <= 0)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "Cart is empty"
+                    });
+                }
+
+                // ==========================
+                // Coupon Check
+                // ==========================
+
+                string couponQuery = @"
+SELECT *
+FROM coupons
+WHERE
+coupon_code = @couponcode
+AND is_active = true
+AND NOW()
+BETWEEN start_date
+AND end_date";
+
+                using var couponCmd =
+                    new NpgsqlCommand(
+                        couponQuery,
+                        con
+                    );
+
+                couponCmd.Parameters.AddWithValue(
+                    "@couponcode",
+                    model.CouponCode.Trim()
+                );
+
+                using var reader =
+                    await couponCmd.ExecuteReaderAsync();
+
+                if (!await reader.ReadAsync())
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "Invalid Coupon Code"
+                    });
+                }
+
+                int couponId =
+                    Convert.ToInt32(
+                        reader["id"]
+                    );
+
+                string couponType =
+                    reader["coupon_type"]
+                    .ToString();
+
+                decimal couponValue =
+                    Convert.ToDecimal(
+                        reader["coupon_value"]
+                    );
+
+                decimal minOrderAmount =
+                    Convert.ToDecimal(
+                        reader["min_order_amount"]
+                    );
+
+                int usageLimit =
+                    Convert.ToInt32(
+                        reader["usage_limit"]
+                    );
+
+                await reader.CloseAsync();
+
+                // ==========================
+                // Minimum Amount Check
+                // ==========================
+
+                if (grandTotal < minOrderAmount)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message =
+                        $"Minimum order amount should be ₹{minOrderAmount}"
+                    });
+                }
+
+                // ==========================
+                // Usage Check
+                // ==========================
+
+                if (userId.HasValue)
+                {
+                    string usageQuery = @"
+SELECT COUNT(*)
+FROM coupon_usage
+WHERE
+couponid = @couponid
+AND userid = @userid";
+
+                    using var usageCmd =
+                        new NpgsqlCommand(
+                            usageQuery,
+                            con
+                        );
+
+                    usageCmd.Parameters.AddWithValue(
+                        "@couponid",
+                        couponId
+                    );
+
+                    usageCmd.Parameters.AddWithValue(
+                        "@userid",
+                        userId.Value
+                    );
+
+                    int usedCount =
+                        Convert.ToInt32(
+                            await usageCmd.ExecuteScalarAsync()
+                        );
+
+                    if (usedCount >= usageLimit)
+                    {
+                        return new BadRequestObjectResult(new
+                        {
+                            success = false,
+                            message = "Coupon already used"
+                        });
+                    }
+                }
+
+                // ==========================
+                // Discount Calculation
+                // ==========================
+
+                decimal discountAmount = 0;
+
+                if (couponType == "FLAT")
+                {
+                    discountAmount =
+                        couponValue;
+                }
+                else
+                {
+                    discountAmount =
+                        (grandTotal * couponValue)
+                        / 100;
+                }
+
+                decimal finalAmount =
+                    grandTotal -
+                    discountAmount;
+
+                if (finalAmount < 0)
+                {
+                    finalAmount = 0;
+                }
+
+                return new OkObjectResult(new
+                {
+                    success = true,
+
+                    couponId,
+
+                    couponCode =
+                        model.CouponCode,
+
+                    couponType,
+
+                    couponValue,
+
+                    grandTotal,
+
+                    discountAmount,
+
+                    finalAmount
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = ex.Message,
+                    innerException =
+                        ex.InnerException?.Message
+                })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
+    }
 }
