@@ -314,11 +314,6 @@ namespace Ecommerce_Backend.Models
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
     }
 
-
-
-
-
-
     public class WishlistModel
 
     {
@@ -358,5 +353,29 @@ namespace Ecommerce_Backend.Models
         // ================= NESTED =================
         public ProductModel? Product { get; set; }
         public ProductVariantModel? Variant { get; set; }
+    }
+
+    public class AddCartModel
+    {
+        public int Id { get; set; }
+
+        public int? UserId { get; set; }
+
+        public int ProductId { get; set; }
+
+        public int? VariantId { get; set; }
+
+        public int Quantity { get; set; } = 1;
+
+        public string? IpAddress { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+
+    public class UpdateCartQuantityModel
+    {
+        public int CartId { get; set; }
+
+        public int Action { get; set; }
     }
 }
