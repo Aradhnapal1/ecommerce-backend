@@ -321,6 +321,7 @@ namespace Ecommerce_Backend.Models
         public int? UserId { get; set; }
         public string? IpAddress { get; set; }
     }
+//edfrg
     public class ApplyCouponModel
     {
         public string CouponCode { get; set; }
