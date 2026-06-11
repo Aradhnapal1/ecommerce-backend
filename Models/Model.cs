@@ -270,50 +270,7 @@ namespace Ecommerce_Backend.Models
 
 
 
-    public class CartModel
-    {
-
-      
-        public int Id { get; set; }
-
-        public int? UserId { get; set; }
-
-        public string? IpAddress { get; set; }
-
-        public int? ProductId { get; set; }
-
-        public int? VariantId { get; set; }
-
-        public int Quantity { get; set; } = 1;
-
-        public decimal Mrp { get; set; }
-
-        public decimal SalePrice { get; set; }
-
-        public decimal TotalPrice { get; set; }
-        public string? ProductName { get; set; }
-        public string? ProductSlug { get; set; }
-        public string? ProductDescription { get; set; }
-        public string? ProductImageUrl { get; set; }
-
-        public decimal? ProductBasePrice { get; set; }
-        public int? ProductStock { get; set; }
-
-        public string? VariantName { get; set; }
-        public string? VariantSku { get; set; }
-        public string? VariantColor { get; set; }
-        public string? VariantImageUrl { get; set; }
-
-        public decimal? VariantMRP { get; set; }
-        public decimal? VariantBasePrice { get; set; }
-        public decimal? VariantSalePrice { get; set; }
-        public int? VariantStock { get; set; }
-
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
-
-        public DateTime UpdatedAt { get; set; } = DateTime.Now;
-    }
-
+    
 
 
 
@@ -337,26 +294,5 @@ namespace Ecommerce_Backend.Models
     }
 
 
-    public class CartResponseModel
-    {
-        // ================= CART =================
-        public int Id { get; set; }
-        public int? UserId { get; set; }
-        public string? IpAddress { get; set; }
-
-        public int? ProductId { get; set; }
-        public int? VariantId { get; set; }
-
-        public int Quantity { get; set; }
-        public decimal Mrp { get; set; }
-        public decimal SalePrice { get; set; }
-        public decimal TotalPrice { get; set; }
-
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-
-        // ================= NESTED =================
-        public ProductModel? Product { get; set; }
-        public ProductVariantModel? Variant { get; set; }
-    }
+ 
 }
