@@ -14,6 +14,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 );
 
         Task<IActionResult> DeleteAddress(int id, int userId);
+        Task<IActionResult> UpdateAddress(
+    UserAddressModel model,
+    int userId
+);
+
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -402,10 +407,179 @@ ORDER BY
 
 
 
+        public async Task<IActionResult> UpdateAddress(
+    UserAddressModel model,
+    int userId)
+        {
+            try
+            {
+                using var con =
+                    new NpgsqlConnection(DbConnection);
 
+                await con.OpenAsync();
 
+                if (model.IsDefault)
+                {
+                    string resetQuery = @"
+UPDATE user_addresses
+SET is_default = false
+WHERE userid = @userid
+AND id <> @id";
+
+                    using var resetCmd =
+                        new NpgsqlCommand(
+                            resetQuery,
+                            con
+                        );
+
+                    resetCmd.Parameters.AddWithValue(
+                        "@userid",
+                        userId
+                    );
+
+                    resetCmd.Parameters.AddWithValue(
+                        "@id",
+                        model.Id
+                    );
+
+                    await resetCmd.ExecuteNonQueryAsync();
+                }
+
+                string query = @"
+UPDATE user_addresses
+SET
+    full_name = @fullname,
+    mobile = @mobile,
+    alternate_mobile = @alternatemobile,
+    address_line1 = @addressline1,
+    address_line2 = @addressline2,
+    landmark = @landmark,
+    city = @city,
+    state = @state,
+    country = @country,
+    pincode = @pincode,
+    address_type = @addresstype,
+    is_default = @isdefault
+WHERE
+    id = @id
+    AND userid = @userid";
+
+                using var cmd =
+                    new NpgsqlCommand(
+                        query,
+                        con
+                    );
+
+                cmd.Parameters.AddWithValue(
+                    "@id",
+                    model.Id
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@userid",
+                    userId
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@fullname",
+                    model.FullName
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@mobile",
+                    model.Mobile
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@alternatemobile",
+                    (object?)model.AlternateMobile
+                    ?? DBNull.Value
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@addressline1",
+                    model.AddressLine1
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@addressline2",
+                    (object?)model.AddressLine2
+                    ?? DBNull.Value
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@landmark",
+                    (object?)model.Landmark
+                    ?? DBNull.Value
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@city",
+                    model.City
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@state",
+                    model.State
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@country",
+                    model.Country
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@pincode",
+                    model.Pincode
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@addresstype",
+                    model.AddressType
+                );
+
+                cmd.Parameters.AddWithValue(
+                    "@isdefault",
+                    model.IsDefault
+                );
+
+                int result =
+                    await cmd.ExecuteNonQueryAsync();
+
+                if (result > 0)
+                {
+                    return new OkObjectResult(new
+                    {
+                        success = true,
+                        message = "Address updated successfully"
+                    });
+                }
+
+                return new NotFoundObjectResult(new
+                {
+                    success = false,
+                    message = "Address not found"
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = ex.Message,
+                    innerException =
+                        ex.InnerException?.Message
+                })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
 
 
 
     }
 }
+
+
+   

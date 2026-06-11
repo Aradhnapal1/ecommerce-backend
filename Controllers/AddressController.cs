@@ -66,5 +66,27 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer
                 .DeleteAddress(id, userId);
         }
+        [HttpPut("update/{id}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateAddress(
+    int id,
+    [FromBody] UserAddressModel model)
+        {
+            int userId =
+                Convert.ToInt32(
+                    User.FindFirst(
+                        ClaimTypes.NameIdentifier
+                    )?.Value
+                );
+
+            model.Id = id;
+
+            return await _businessLayer
+                .UpdateAddress(
+                    model,
+                    userId
+                );
+        }
+
     }
 }

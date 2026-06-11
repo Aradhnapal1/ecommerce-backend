@@ -13,6 +13,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                );
 
         Task<IActionResult> DeleteAddress(int id, int userId);
+
+        Task<IActionResult> UpdateAddress(
+    UserAddressModel model,
+    int userId
+);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -36,6 +41,16 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             return await _databaseLayer.DeleteAddress(id, userId);
         }
+
+
+        public async Task<IActionResult> UpdateAddress(
+    UserAddressModel model,
+    int userId)
+        {
+            return await _databaseLayer
+                .UpdateAddress(model, userId);
+        }
+
     }
 
 }
