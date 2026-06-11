@@ -109,5 +109,13 @@ namespace Ecommerce_Backend.Controllers
                 .UpdateCartQuantity(model);
         }
 
+
+        [HttpDelete("delete/{id}")]
+
+        public async Task<IActionResult> DeleteCartItem(int id)
+        {
+            return await _businessLayer
+                .DeleteCartItem(id);
+        }
     }
 }

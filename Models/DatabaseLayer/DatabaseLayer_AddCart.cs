@@ -18,6 +18,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> UpdateCartQuantity(
             UpdateCartQuantityModel model
         );
+        Task<IActionResult> DeleteCartItem(int id);
 
     }
 
@@ -747,6 +748,56 @@ WHERE id = @cartid";
             }
         }
 
+
+
+
+        public async Task<IActionResult> DeleteCartItem(int id)
+        {
+            try
+            {
+                using var con =
+                    new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+                string deleteQuery = @"
+DELETE FROM addcart
+WHERE id = @cartid";
+
+                using var deleteCmd =
+                    new NpgsqlCommand(
+                        deleteQuery,
+                        con
+                    );
+
+                deleteCmd.Parameters.AddWithValue(
+                    "@cartid",
+                    id
+                );
+
+                await deleteCmd
+                    .ExecuteNonQueryAsync();
+
+                return new OkObjectResult(
+                    new
+                    {
+                        success = true,
+                        message = "Cart item deleted successfully",
+                        cartId = id
+                    });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(
+                    new
+                    {
+                        success = false,
+                        message = ex.Message,
+                        innerException =
+                            ex.InnerException?.Message
+                    })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
     }
 }
-   

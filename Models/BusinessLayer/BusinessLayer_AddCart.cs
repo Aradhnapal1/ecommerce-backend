@@ -12,6 +12,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     UpdateCartQuantityModel model
 );
 
+        Task<IActionResult> DeleteCartItem(int id);
 
 
     }
@@ -43,6 +44,12 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 .UpdateCartQuantity(model);
         }
 
+
+        public async Task<IActionResult> DeleteCartItem(int id)
+        {
+            return await _databaseLayer
+                .DeleteCartItem(id);
+        }
 
     }
 }
