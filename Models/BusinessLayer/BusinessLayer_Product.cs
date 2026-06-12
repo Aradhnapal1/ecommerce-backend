@@ -2,6 +2,7 @@
 
 namespace Ecommerce_Backend.Models.BusinessLayer
 {
+    //ytrfedgbhnjk
    public partial interface IBusinessLayer
     {
         Task<IActionResult> GetAllProducts();
