@@ -6,6 +6,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     {
         Task<IActionResult> GetAllProducts();
         Task<IActionResult> GetFilteredProducts(ProductFilterRequest filter);
+        Task<IActionResult> SearchProducts(string query, ProductFilterRequest? filter);
         Task<IActionResult> AddProduct([FromForm] ProductModel product);
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
@@ -38,20 +39,41 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 totalPages = (int)Math.Ceiling(total / (double)filter.PageSize),
                 filters = new
                 {
-                    filter.CategoryId,
-                    filter.BrandId,
-                    filter.ColorId,
-                    filter.SizeId,
+                    categoryIds = filter.ResolvedCategoryIds,
+                    brandIds = filter.ResolvedBrandIds,
+                    colorIds = filter.ResolvedColorIds,
+                    sizeIds = filter.ResolvedSizeIds,
+                    discountPercents = filter.ResolvedDiscountPercents,
                     filter.MinPrice,
                     filter.MaxPrice,
-                    filter.MinDiscount,
                     filter.HasDiscount,
                     filter.InStock,
-                    filter.Search,
-                    filter.SortBy
+                    search = filter.ResolvedSearch,
+                    filter.SortBy,
+                    filter.UseGlobalSearch
                 },
                 data = products
             });
+        }
+
+        public async Task<IActionResult> SearchProducts(
+            string query,
+            ProductFilterRequest? filter)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Search query 'q' is required"
+                });
+            }
+
+            filter ??= new ProductFilterRequest();
+            filter.Q = query.Trim();
+            filter.UseGlobalSearch = true;
+
+            return await GetFilteredProducts(filter);
         }
 
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)

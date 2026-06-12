@@ -196,33 +196,75 @@ namespace Ecommerce_Backend.Models
     public class ProductFilterRequest
     {
         public int? CategoryId { get; set; }
+        public int[]? CategoryIds { get; set; }
         public int? BrandId { get; set; }
+        public int[]? BrandIds { get; set; }
         public int? ColorId { get; set; }
+        public int[]? ColorIds { get; set; }
         public int? SizeId { get; set; }
+        public int[]? SizeIds { get; set; }
         public decimal? MinPrice { get; set; }
         public decimal? MaxPrice { get; set; }
         public decimal? MinDiscount { get; set; }
+        public decimal[]? DiscountPercents { get; set; }
         public bool? HasDiscount { get; set; }
         public string? Search { get; set; }
+        public string? Q { get; set; }
         public string? SortBy { get; set; }
         public bool? InStock { get; set; }
+        public bool UseGlobalSearch { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
 
+        public string? ResolvedSearch =>
+            !string.IsNullOrWhiteSpace(Search) ? Search.Trim()
+            : !string.IsNullOrWhiteSpace(Q) ? Q.Trim()
+            : null;
+
+        public decimal[] ResolvedDiscountPercents =>
+            DiscountPercents is { Length: > 0 }
+                ? DiscountPercents
+                : MinDiscount.HasValue ? new[] { MinDiscount.Value } : Array.Empty<decimal>();
+
+        public int[] ResolvedCategoryIds =>
+            CategoryIds is { Length: > 0 }
+                ? CategoryIds
+                : CategoryId.HasValue ? new[] { CategoryId.Value } : Array.Empty<int>();
+
+        public int[] ResolvedBrandIds =>
+            BrandIds is { Length: > 0 }
+                ? BrandIds
+                : BrandId.HasValue ? new[] { BrandId.Value } : Array.Empty<int>();
+
+        public int[] ResolvedColorIds =>
+            ColorIds is { Length: > 0 }
+                ? ColorIds
+                : ColorId.HasValue ? new[] { ColorId.Value } : Array.Empty<int>();
+
+        public int[] ResolvedSizeIds =>
+            SizeIds is { Length: > 0 }
+                ? SizeIds
+                : SizeId.HasValue ? new[] { SizeId.Value } : Array.Empty<int>();
+
         public bool HasFilters() =>
-            CategoryId.HasValue ||
-            BrandId.HasValue ||
-            ColorId.HasValue ||
-            SizeId.HasValue ||
+            ResolvedCategoryIds.Length > 0 ||
+            ResolvedBrandIds.Length > 0 ||
+            ResolvedColorIds.Length > 0 ||
+            ResolvedSizeIds.Length > 0 ||
             MinPrice.HasValue ||
             MaxPrice.HasValue ||
-            MinDiscount.HasValue ||
+            ResolvedDiscountPercents.Length > 0 ||
             HasDiscount.HasValue ||
             InStock.HasValue ||
-            !string.IsNullOrWhiteSpace(Search) ||
+            !string.IsNullOrWhiteSpace(ResolvedSearch) ||
             !string.IsNullOrWhiteSpace(SortBy) ||
             Page > 1 ||
             PageSize != 20;
+    }
+
+    public class ProductSearchRequest : ProductFilterRequest
+    {
+        public new string Q { get; set; } = string.Empty;
     }
 
     public class BannerModel

@@ -41,6 +41,18 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.GetFilteredProducts(filter);
         }
 
+        /// <summary>
+        /// Global product search — name, SKU, slug, description, brand, category, color.
+        /// Combine with multi-select filters: categoryIds, brandIds, colorIds, sizeIds, discountPercents.
+        /// </summary>
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchProducts(
+            [FromQuery] string q,
+            [FromQuery] ProductFilterRequest? filter)
+        {
+            return await _businessLayer.SearchProducts(q, filter);
+        }
+
         [HttpPost("addproduct")]
         [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)

@@ -141,28 +141,30 @@ ORDER BY p.id DESC;
             var whereClauses = new List<string> { "p.isactive = true" };
             var parameters = new List<NpgsqlParameter>();
 
-            if (filter.CategoryId.HasValue)
+            if (filter.ResolvedCategoryIds.Length > 0)
             {
-                whereClauses.Add("p.categoryid = @categoryId");
-                parameters.Add(new NpgsqlParameter("categoryId", filter.CategoryId.Value));
+                whereClauses.Add("p.categoryid = ANY(@categoryIds)");
+                parameters.Add(new NpgsqlParameter("categoryIds", filter.ResolvedCategoryIds));
             }
 
-            if (filter.BrandId.HasValue)
+            if (filter.ResolvedBrandIds.Length > 0)
             {
-                whereClauses.Add("p.brandid = @brandId");
-                parameters.Add(new NpgsqlParameter("brandId", filter.BrandId.Value));
+                whereClauses.Add("p.brandid = ANY(@brandIds)");
+                parameters.Add(new NpgsqlParameter("brandIds", filter.ResolvedBrandIds));
             }
 
-            if (filter.ColorId.HasValue)
+            if (filter.ResolvedColorIds.Length > 0)
             {
-                whereClauses.Add("p.color = @colorId");
-                parameters.Add(new NpgsqlParameter("colorId", filter.ColorId.Value.ToString()));
+                whereClauses.Add("p.color = ANY(@colorIds)");
+                parameters.Add(new NpgsqlParameter(
+                    "colorIds",
+                    filter.ResolvedColorIds.Select(id => id.ToString()).ToArray()));
             }
 
-            if (filter.SizeId.HasValue)
+            if (filter.ResolvedSizeIds.Length > 0)
             {
-                whereClauses.Add("@sizeId = ANY(p.sizes)");
-                parameters.Add(new NpgsqlParameter("sizeId", filter.SizeId.Value));
+                whereClauses.Add("p.sizes && @sizeIds");
+                parameters.Add(new NpgsqlParameter("sizeIds", filter.ResolvedSizeIds));
             }
 
             if (filter.MinPrice.HasValue)
@@ -177,10 +179,15 @@ ORDER BY p.id DESC;
                 parameters.Add(new NpgsqlParameter("maxPrice", filter.MaxPrice.Value));
             }
 
-            if (filter.MinDiscount.HasValue)
+            if (filter.ResolvedDiscountPercents.Length > 0)
             {
-                whereClauses.Add("COALESCE(p.discountprice, 0) >= @minDiscount");
-                parameters.Add(new NpgsqlParameter("minDiscount", filter.MinDiscount.Value));
+                whereClauses.Add(
+                    "ROUND(COALESCE(p.discountprice, 0)::numeric, 0) = ANY(@discountPercents)");
+                parameters.Add(new NpgsqlParameter(
+                    "discountPercents",
+                    filter.ResolvedDiscountPercents
+                        .Select(d => (int)Math.Round(d))
+                        .ToArray()));
             }
 
             if (filter.HasDiscount == true)
@@ -193,11 +200,25 @@ ORDER BY p.id DESC;
                 whereClauses.Add("p.stock > 0");
             }
 
-            if (!string.IsNullOrWhiteSpace(filter.Search))
+            if (!string.IsNullOrWhiteSpace(filter.ResolvedSearch))
             {
-                whereClauses.Add(
-                    "(p.productname ILIKE @search OR p.sku ILIKE @search OR p.slug ILIKE @search)");
-                parameters.Add(new NpgsqlParameter("search", $"%{filter.Search.Trim()}%"));
+                var searchClause = filter.UseGlobalSearch
+                    ? @"(
+                        p.productname ILIKE @search
+                        OR p.sku ILIKE @search
+                        OR p.slug ILIKE @search
+                        OR p.shortdescription ILIKE @search
+                        OR p.description ILIKE @search
+                        OR b.brand_name ILIKE @search
+                        OR c.category_name ILIKE @search
+                        OR col.color_name ILIKE @search
+                    )"
+                    : @"(p.productname ILIKE @search OR p.sku ILIKE @search OR p.slug ILIKE @search)";
+
+                whereClauses.Add(searchClause);
+                parameters.Add(new NpgsqlParameter(
+                    "search",
+                    $"%{filter.ResolvedSearch}%"));
             }
 
             var whereSql = string.Join(" AND ", whereClauses);
