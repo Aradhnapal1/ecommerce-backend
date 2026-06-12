@@ -106,6 +106,7 @@ namespace Ecommerce_Backend.Models
         public string CategoryName { get; set; } = "";
 
         public int? ParentId { get; set; }
+        public string? Type { get; set; } = "";
 
         // Database me save hone wali image URL
         public string? CategoryImage { get; set; }
@@ -122,6 +123,7 @@ namespace Ecommerce_Backend.Models
         public string CategoryName { get; set; } = "";
 
         public int? ParentId { get; set; }
+        public string? Type { get; set; }
 
         public string? CategoryImage { get; set; }
 

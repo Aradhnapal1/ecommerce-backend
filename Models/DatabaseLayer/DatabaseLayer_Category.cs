@@ -136,6 +136,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             (
                 category_name,
                 parent_id,
+                type,
                 category_image,
                 is_active
             )
@@ -143,6 +144,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             (
                 @category_name,
                 @parent_id,
+                @type,
                 @category_image,
                 @is_active
             )
@@ -158,6 +160,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     category.ParentId.HasValue
                         ? category.ParentId.Value
                         : DBNull.Value);
+
+                cmd.Parameters.AddWithValue(
+                    "@type",
+                    category.Type);
 
                 cmd.Parameters.AddWithValue(
                     "@category_image",
@@ -177,6 +183,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     id = id,
                     categoryName = category.CategoryName,
                     parentId = category.ParentId,
+                    type = category.Type,
                     categoryImage = imageUrl,
                     isActive = category.IsActive
                 });
@@ -202,6 +209,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 id,
                 category_name,
                 parent_id,
+                type,
                 category_image,
                 is_active
             FROM categories
@@ -216,22 +224,28 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     categories.Add(new CategoryTreeModel
                     {
-                        Id = reader.GetInt32(0),
-                        CategoryName = reader.GetString(1),
-                        ParentId = reader.IsDBNull(2)
+                        Id = Convert.ToInt32(reader["id"]),
+                        CategoryName = reader["category_name"]?.ToString() ?? "",
+                        ParentId = reader["parent_id"] == DBNull.Value
                             ? null
-                            : reader.GetInt32(2),
-                        CategoryImage = reader.IsDBNull(3)
+                            : Convert.ToInt32(reader["parent_id"]),
+
+                        Type = reader["type"]?.ToString() ?? "",
+
+                        CategoryImage = reader["category_image"] == DBNull.Value
                             ? null
-                            : reader.GetString(3),
-                        IsActive = reader.GetBoolean(4)
+                            : reader["category_image"]?.ToString(),
+
+                        IsActive = Convert.ToBoolean(reader["is_active"]),
+
+                        Children = new List<CategoryTreeModel>()
                     });
                 }
 
-                // Dictionary for fast lookup
+                // Fast lookup dictionary
                 var lookup = categories.ToDictionary(x => x.Id);
 
-                // Root Categories
+                // Root categories
                 var roots = new List<CategoryTreeModel>();
 
                 foreach (var category in categories)
@@ -240,17 +254,16 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     {
                         roots.Add(category);
                     }
-                    else if (lookup.ContainsKey(category.ParentId.Value))
+                    else if (lookup.TryGetValue(category.ParentId.Value, out var parent))
                     {
-                        lookup[category.ParentId.Value]
-                            .Children
-                            .Add(category);
+                        parent.Children.Add(category);
                     }
                 }
 
                 return new OkObjectResult(new
                 {
                     status = true,
+                    message = "Categories fetched successfully",
                     data = roots
                 });
             }
@@ -263,7 +276,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 });
             }
         }
-
 
         public async Task<IActionResult> UpdateCategory(int id, CategoryModel category)
         {
@@ -311,6 +323,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     parentCmd.Parameters.AddWithValue(
                         "@parentId",
                         category.ParentId.Value);
+
 
                     var parentCount = Convert.ToInt32(
                         await parentCmd.ExecuteScalarAsync());
@@ -419,6 +432,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             SET
                 category_name = @category_name,
                 parent_id = @parent_id,
+                    type = @type,
                 category_image = @category_image,
                 is_active = @is_active
             WHERE id = @id
@@ -433,6 +447,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     category.ParentId.HasValue
                         ? category.ParentId.Value
                         : DBNull.Value);
+                cmd.Parameters.AddWithValue(
+                    "@type",
+                    category.Type ?? "");
 
                 cmd.Parameters.AddWithValue(
                     "@category_image",
