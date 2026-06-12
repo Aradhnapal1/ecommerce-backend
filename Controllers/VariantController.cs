@@ -1,6 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -48,6 +50,7 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpPost("addvariant")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddVariant([FromForm] ProductVariantModel variant)
         {
             try
@@ -73,6 +76,7 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpPut("updatevariant/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateVariant(int id, [FromForm] ProductVariantModel variant)
         {
             try
@@ -98,6 +102,7 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpDelete("deletevariant/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteVariant(int id)
         {
             var result = await _businessLayer.DeleteVariant(id);

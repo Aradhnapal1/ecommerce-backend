@@ -1,6 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -20,6 +22,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("addbrand")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddBrand([FromForm] BrandModel brand)
         {
             return await _businessLayer.AddBrand(brand);
@@ -34,6 +37,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPut("updatebrand/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateBrand(int id, [FromForm] BrandModel brand)
         {
             return await _businessLayer.UpdateBrand(id, brand);
@@ -41,6 +45,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpDelete("deletebrand/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteBrand(int id)
         {
             return await _businessLayer.DeleteBrand(id);

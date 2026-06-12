@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -89,9 +90,14 @@ builder.Services.AddAuthentication(options =>
                     Encoding.UTF8.GetBytes(
                         builder.Configuration["Jwt:Key"]!
                     )
-                )
+                ),
+
+            RoleClaimType = ClaimTypes.Role,
+            NameClaimType = ClaimTypes.NameIdentifier
         };
 });
+
+builder.Services.AddAuthorization();
 
 builder.Services.Configure<CloudinarySettings>(
     builder.Configuration.GetSection("CloudinarySettings"));
@@ -135,6 +141,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+
+app.MapControllers();
 
 app.MapControllerRoute(
     name: "default",

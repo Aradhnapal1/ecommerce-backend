@@ -215,8 +215,21 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     ", con);
             cmd.Parameters.AddWithValue("@id", id);
 
-            await cmd.ExecuteNonQueryAsync();
-            return new OkResult();
+            var rows = await cmd.ExecuteNonQueryAsync();
+            if (rows == 0)
+            {
+                return new NotFoundObjectResult(new
+                {
+                    success = false,
+                    message = "User not found"
+                });
+            }
+
+            return new OkObjectResult(new
+            {
+                success = true,
+                message = "User deleted successfully"
+            });
         }
     }
 }

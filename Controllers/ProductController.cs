@@ -1,6 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -22,12 +24,37 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpGet("getallproducts")]
-        public async Task<IActionResult> GetAllProducts()
+        public async Task<IActionResult> GetAllProducts([FromQuery] ProductFilterRequest? filter)
         {
+            if (filter != null && filter.HasFilters())
+                return await _businessLayer.GetFilteredProducts(filter);
+
             return await _businessLayer.GetAllProducts();
         }
 
+        /// <summary>
+        /// Filter products by category, brand, color, size, price, discount, search, sort.
+        /// </summary>
+        [HttpGet("filter")]
+        public async Task<IActionResult> FilterProducts([FromQuery] ProductFilterRequest filter)
+        {
+            return await _businessLayer.GetFilteredProducts(filter);
+        }
+
+        /// <summary>
+        /// Global product search — name, SKU, slug, description, brand, category, color.
+        /// Combine with multi-select filters: categoryIds, brandIds, colorIds, sizeIds, discountPercents.
+        /// </summary>
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchProducts(
+            [FromQuery] string q,
+            [FromQuery] ProductFilterRequest? filter)
+        {
+            return await _businessLayer.SearchProducts(q, filter);
+        }
+
         [HttpPost("addproduct")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
         {
             var result = await _businessLayer.AddProduct(product);
@@ -35,6 +62,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPut("updateproduct/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
         {
             var result = await _businessLayer.UpdateProduct(id, product);
@@ -43,6 +71,7 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpDelete("deleteproduct/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteProduct(int id)
         {
             var result = await _businessLayer.DeleteProduct(id);

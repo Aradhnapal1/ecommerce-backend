@@ -1,6 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -20,6 +22,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("addcategory")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddCategory([FromForm] CategoryModel category)
         {
             return await _businessLayer.AddCategory(category);
@@ -32,12 +35,14 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPut("updatecategory/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateCategory(int id,[FromForm] CategoryModel category)
         {
             return await _businessLayer.UpdateCategory(id, category);
         }
 
         [HttpDelete("deletecategory/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             return await _businessLayer.DeleteCategory(id);

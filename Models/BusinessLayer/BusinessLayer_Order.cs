@@ -5,17 +5,16 @@ namespace Ecommerce_Backend.Models.BusinessLayer
    public partial interface IBusinessLayer
     {
         Task<IActionResult> CreateOrder(CreateOrderModel model, int userId);
-        Task<List<OrderDetailsModel>> GetAllOrders();
-        Task<OrderDetailsModel> GetOrderById(int orderId);
+        Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin);
+        Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin);
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
-        Task<List<OrderItemModel>> GetOrderItems(int orderId);
+        Task<List<OrderItemModel>?> GetOrderItems(int orderId, int userId, bool isAdmin);
     }
 
     public partial class BusinessLayer : IBusinessLayer
     {
         public async Task<IActionResult> CreateOrder(CreateOrderModel model, int userId)
         {
-            // Validate input
             if (userId <= 0)
             {
                 return new BadRequestObjectResult(new
@@ -46,14 +45,14 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             return await _databaseLayer.CreateOrder(model, userId);
         }
 
-        public async Task<List<OrderDetailsModel>> GetAllOrders()
+        public async Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin)
         {
-            return await _databaseLayer.GetAllOrders();
+            return await _databaseLayer.GetAllOrders(userId, isAdmin);
         }
 
-        public async Task<OrderDetailsModel> GetOrderById(int orderId)
+        public async Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin)
         {
-            return await _databaseLayer.GetOrderById(orderId);
+            return await _databaseLayer.GetOrderById(orderId, userId, isAdmin);
         }
 
         public async Task<IActionResult> UpdateOrderStatus(int orderId, string status)
@@ -79,8 +78,12 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             return await _databaseLayer.UpdateOrderStatus(orderId, status);
         }
 
-        public async Task<List<OrderItemModel>> GetOrderItems(int orderId)
+        public async Task<List<OrderItemModel>?> GetOrderItems(int orderId, int userId, bool isAdmin)
         {
+            var order = await _databaseLayer.GetOrderById(orderId, userId, isAdmin);
+            if (order == null)
+                return null;
+
             return await _databaseLayer.GetOrderItems(orderId);
         }
     }

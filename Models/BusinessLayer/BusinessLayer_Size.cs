@@ -30,16 +30,12 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             {
                 return new BadRequestObjectResult("Size name is required.");
             }
-            var result = await _databaseLayer.UpdateSize(id, size);
-            return new OkObjectResult(result);
-
+            return await _databaseLayer.UpdateSize(id, size);
         }
-
 
         public async Task<IActionResult> DeleteSize(int id)
         {
-            var result = await _databaseLayer.DeleteSize(id);
-            return new OkObjectResult(result);
+            return await _databaseLayer.DeleteSize(id);
         }
     }
 }

@@ -1,7 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -9,7 +10,7 @@ namespace Ecommerce_Backend.Controllers
     [Route("api/coupons")]
     public class couponController : ControllerBase
     {
-        private IBusinessLayer _businessLayer;
+        private readonly IBusinessLayer _businessLayer;
 
         public couponController(IBusinessLayer businessLayer)
         {
@@ -23,58 +24,33 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("add")]
-
-        public async Task <IActionResult> AddCoupon([FromBody] CouponModel coupon) { 
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> AddCoupon([FromBody] CouponModel coupon)
+        {
             return await _businessLayer.AddCoupon(coupon);
         }
 
         [HttpPut("edit/{id}")]
-        public async Task <IActionResult>EditCoupun(int id, [FromBody]CouponModel coupon)
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> EditCoupun(int id, [FromBody] CouponModel coupon)
         {
             return await _businessLayer.EditCoupun(id, coupon);
         }
 
         [HttpDelete("delete/{id}")]
-        public async Task <IActionResult> DeleteCoupon(int id)
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> DeleteCoupon(int id)
         {
             return await _businessLayer.DeleteCoupon(id);
         }
 
         [HttpPost("apply")]
-        public async Task<IActionResult> ApplyCoupon(
-    [FromForm] ApplyCouponModel model)
+        [Authorize]
+        public async Task<IActionResult> ApplyCoupon([FromForm] ApplyCouponModel model)
         {
-            int? userId = null;
-            string? ipAddress = null;
+            var userId = UserContextHelper.GetUserId(User)!.Value;
 
-            var userClaim =
-                User.FindFirst(
-                    System.Security.Claims.ClaimTypes.NameIdentifier
-                );
-
-            if (userClaim != null)
-            {
-                userId =
-                    Convert.ToInt32(
-                        userClaim.Value
-                    );
-            }
-            else
-            {
-                ipAddress =
-                    HttpContext.Connection
-                    .RemoteIpAddress?
-                    .ToString();
-            }
-
-            return await _businessLayer
-                .ApplyCoupon(
-                    model,
-                    userId,
-                    ipAddress
-                );
+            return await _businessLayer.ApplyCoupon(model, userId, null);
         }
-
     }
-
 }

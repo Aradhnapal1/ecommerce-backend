@@ -9,6 +9,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     public partial interface IDatabaseLayer
     {
         Task<List<ProductModel>> GetAllProducts();
+        Task<(List<ProductModel> Products, int Total)> GetFilteredProducts(ProductFilterRequest filter);
         Task<IActionResult> AddProduct([FromForm] ProductModel product);
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
@@ -133,6 +134,215 @@ ORDER BY p.id DESC;
             return products;
         }
 
+        public async Task<(List<ProductModel> Products, int Total)> GetFilteredProducts(
+            ProductFilterRequest filter)
+        {
+            var products = new List<ProductModel>();
+            var whereClauses = new List<string> { "p.isactive = true" };
+            var parameters = new List<NpgsqlParameter>();
+
+            if (filter.ResolvedCategoryIds.Length > 0)
+            {
+                whereClauses.Add("p.categoryid = ANY(@categoryIds)");
+                parameters.Add(new NpgsqlParameter("categoryIds", filter.ResolvedCategoryIds));
+            }
+
+            if (filter.ResolvedBrandIds.Length > 0)
+            {
+                whereClauses.Add("p.brandid = ANY(@brandIds)");
+                parameters.Add(new NpgsqlParameter("brandIds", filter.ResolvedBrandIds));
+            }
+
+            if (filter.ResolvedColorIds.Length > 0)
+            {
+                whereClauses.Add("p.color = ANY(@colorIds)");
+                parameters.Add(new NpgsqlParameter(
+                    "colorIds",
+                    filter.ResolvedColorIds.Select(id => id.ToString()).ToArray()));
+            }
+
+            if (filter.ResolvedSizeIds.Length > 0)
+            {
+                whereClauses.Add("p.sizes && @sizeIds");
+                parameters.Add(new NpgsqlParameter("sizeIds", filter.ResolvedSizeIds));
+            }
+
+            if (filter.MinPrice.HasValue)
+            {
+                whereClauses.Add("p.saleprice >= @minPrice");
+                parameters.Add(new NpgsqlParameter("minPrice", filter.MinPrice.Value));
+            }
+
+            if (filter.MaxPrice.HasValue)
+            {
+                whereClauses.Add("p.saleprice <= @maxPrice");
+                parameters.Add(new NpgsqlParameter("maxPrice", filter.MaxPrice.Value));
+            }
+
+            if (filter.ResolvedDiscountPercents.Length > 0)
+            {
+                whereClauses.Add(
+                    "ROUND(COALESCE(p.discountprice, 0)::numeric, 0) = ANY(@discountPercents)");
+                parameters.Add(new NpgsqlParameter(
+                    "discountPercents",
+                    filter.ResolvedDiscountPercents
+                        .Select(d => (int)Math.Round(d))
+                        .ToArray()));
+            }
+
+            if (filter.HasDiscount == true)
+            {
+                whereClauses.Add("(COALESCE(p.discountprice, 0) > 0 OR p.saleprice < p.mrp)");
+            }
+
+            if (filter.InStock == true)
+            {
+                whereClauses.Add("p.stock > 0");
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.ResolvedSearch))
+            {
+                var searchClause = filter.UseGlobalSearch
+                    ? @"(
+                        p.productname ILIKE @search
+                        OR p.sku ILIKE @search
+                        OR p.slug ILIKE @search
+                        OR p.shortdescription ILIKE @search
+                        OR p.description ILIKE @search
+                        OR b.brand_name ILIKE @search
+                        OR c.category_name ILIKE @search
+                        OR col.color_name ILIKE @search
+                    )"
+                    : @"(p.productname ILIKE @search OR p.sku ILIKE @search OR p.slug ILIKE @search)";
+
+                whereClauses.Add(searchClause);
+                parameters.Add(new NpgsqlParameter(
+                    "search",
+                    $"%{filter.ResolvedSearch}%"));
+            }
+
+            var whereSql = string.Join(" AND ", whereClauses);
+
+            var orderBy = filter.SortBy?.ToLowerInvariant() switch
+            {
+                "price_low" => "p.saleprice ASC, p.id DESC",
+                "price_high" => "p.saleprice DESC, p.id DESC",
+                "discount_high" => "COALESCE(p.discountprice, 0) DESC, p.id DESC",
+                "name" => "p.productname ASC",
+                _ => "p.id DESC"
+            };
+
+            var page = filter.Page < 1 ? 1 : filter.Page;
+            var pageSize = filter.PageSize < 1 ? 20 : Math.Min(filter.PageSize, 100);
+            var offset = (page - 1) * pageSize;
+
+            var baseFrom = @"
+FROM products p
+LEFT JOIN brands b ON b.id = p.brandid
+LEFT JOIN categories c ON c.id = p.categoryid
+LEFT JOIN colors col ON col.id = p.color::INT";
+
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            var countQuery = $"SELECT COUNT(*) {baseFrom} WHERE {whereSql}";
+            using (var countCmd = new NpgsqlCommand(countQuery, con))
+            {
+                foreach (var p in parameters)
+                    countCmd.Parameters.Add(p);
+
+                var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
+
+                var dataQuery = $@"
+SELECT
+    p.*,
+    b.brand_name,
+    c.category_name,
+    col.color_name,
+    (
+        SELECT ARRAY_AGG(s.size_name)
+        FROM sizes s
+        WHERE s.id = ANY(p.sizes)
+    ) AS size_names
+{baseFrom}
+WHERE {whereSql}
+ORDER BY {orderBy}
+LIMIT @pageSize OFFSET @offset";
+
+                using var cmd = new NpgsqlCommand(dataQuery, con);
+                foreach (var p in parameters)
+                    cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName, p.Value));
+
+                cmd.Parameters.AddWithValue("pageSize", pageSize);
+                cmd.Parameters.AddWithValue("offset", offset);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    products.Add(MapProduct(reader));
+
+                return (products, total);
+            }
+        }
+
+        private static ProductModel MapProduct(NpgsqlDataReader reader)
+        {
+            return new ProductModel
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("id")),
+                ProductName = reader["productname"]?.ToString(),
+                Slug = reader["slug"]?.ToString(),
+                Type = reader["type"]?.ToString(),
+                ShortDescription = reader["shortdescription"]?.ToString(),
+                Description = reader["description"]?.ToString(),
+                SKU = reader["sku"]?.ToString(),
+                BrandId = reader.IsDBNull(reader.GetOrdinal("brandid"))
+                    ? null
+                    : reader.GetInt32(reader.GetOrdinal("brandid")),
+                CategoryId = reader.IsDBNull(reader.GetOrdinal("categoryid"))
+                    ? null
+                    : reader.GetInt32(reader.GetOrdinal("categoryid")),
+                BasePrice = reader.IsDBNull(reader.GetOrdinal("baseprice"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("baseprice")),
+                MRP = reader.IsDBNull(reader.GetOrdinal("mrp"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("mrp")),
+                DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice"))
+                    ? null
+                    : reader.GetDecimal(reader.GetOrdinal("discountprice")),
+                SalePrice = reader.IsDBNull(reader.GetOrdinal("saleprice"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("saleprice")),
+                GST = reader.IsDBNull(reader.GetOrdinal("gst"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("gst")),
+                Stock = reader.IsDBNull(reader.GetOrdinal("stock"))
+                    ? 0
+                    : reader.GetInt32(reader.GetOrdinal("stock")),
+                ProductImageUrl = reader["productimageurl"]?.ToString(),
+                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
+                    ? Array.Empty<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
+                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
+                    ? Array.Empty<int>()
+                    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
+                Color = reader["color"]?.ToString(),
+                IsActive = !reader.IsDBNull(reader.GetOrdinal("isactive"))
+                    && reader.GetBoolean(reader.GetOrdinal("isactive")),
+                CreatedAt = reader.IsDBNull(reader.GetOrdinal("createdat"))
+                    ? DateTime.MinValue
+                    : reader.GetDateTime(reader.GetOrdinal("createdat")),
+                UpdatedAt = reader.IsDBNull(reader.GetOrdinal("updatedat"))
+                    ? DateTime.MinValue
+                    : reader.GetDateTime(reader.GetOrdinal("updatedat")),
+                BrandName = reader["brand_name"]?.ToString(),
+                CategoryName = reader["category_name"]?.ToString(),
+                ColorName = reader["color_name"]?.ToString(),
+                SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                    ? new List<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
+            };
+        }
 
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
         {
