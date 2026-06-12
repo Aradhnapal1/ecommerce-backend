@@ -7,8 +7,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> AddWishlist(
             [FromForm] WishlistModel wishlist
         );
-         Task<IActionResult> GetWishlist();
-         Task<IActionResult> WishlistDelete(int id);
+         Task<IActionResult> GetWishlist(int? userId, string? ipAddress);
+         Task<IActionResult> WishlistDelete(int id, int? userId, string? ipAddress);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -19,16 +19,15 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             return await _databaseLayer
                 .AddWishlist(wishlist);
         }
-        public async  Task<IActionResult> GetWishlist()
-        {
-            var result = await _databaseLayer.GetWishlist();
-            return result;
-        }
-        public async Task<IActionResult> WishlistDelete(int id)
-        {
-            var result = await _databaseLayer.WishlistDelete(id);
-            return result;
-        }
-    }
 
+        public async Task<IActionResult> GetWishlist(int? userId, string? ipAddress)
+        {
+            return await _databaseLayer.GetWishlist(userId, ipAddress);
+        }
+
+        public async Task<IActionResult> WishlistDelete(int id, int? userId, string? ipAddress)
+        {
+            return await _databaseLayer.WishlistDelete(id, userId, ipAddress);
+        }
     }
+}

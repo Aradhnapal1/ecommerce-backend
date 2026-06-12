@@ -1,5 +1,7 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -24,6 +26,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("create")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> CreateColor([FromBody] ColorResponse color)
         {
             try
@@ -43,6 +46,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPut("update/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateColor(int id, [FromBody] ColorResponse color)
         {
             try
@@ -61,6 +65,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpDelete("delete/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteColor(int id)
         {
             try

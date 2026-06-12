@@ -1,13 +1,14 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Ecommerce_Backend.Controllers
 {
     [ApiController]
     [Route("api/orders")]
+    [Authorize]
     public class OrderController : ControllerBase
     {
         private readonly IBusinessLayer _businessLayer;
@@ -17,32 +18,22 @@ namespace Ecommerce_Backend.Controllers
             _businessLayer = businessLayer; 
         }
 
-        /// <summary>
-        /// Create a new order (Requires Authentication)
-        /// </summary>
-        /// <param name="model">Order creation model with AddressId, PaymentMethod, and optional CouponCode</param>
-        /// <returns>Order creation response with order details</returns>
         [HttpPost("create")]
-        [Authorize]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderModel model)
         {
-            // Extract UserId from JWT token
-            var userId = Convert.ToInt32(
-                User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            );
-
+            var userId = UserContextHelper.GetUserId(User)!.Value;
             return await _businessLayer.CreateOrder(model, userId);
         }
 
-        /// <summary>
-        /// Get all orders
-        /// </summary>
-        /// <returns>List of all orders</returns>
-        [HttpGet("all")]        [Authorize]        public async Task<IActionResult> GetAllOrders()
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAllOrders()
         {
             try
             {
-                var orders = await _businessLayer.GetAllOrders();
+                var userId = UserContextHelper.GetUserId(User)!.Value;
+                var isAdmin = UserContextHelper.IsAdmin(User);
+
+                var orders = await _businessLayer.GetAllOrders(userId, isAdmin);
                 return Ok(new
                 {
                     success = true,
@@ -60,18 +51,15 @@ namespace Ecommerce_Backend.Controllers
             }
         }
 
-        /// <summary>
-        /// Get order by ID (Requires Authentication)
-        /// </summary>
-        /// <param name="id">Order ID</param>
-        /// <returns>Order details</returns>
-        [HttpGet("{id}")]
-        [Authorize]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetOrderById(int id)
         {
             try
             {
-                var order = await _businessLayer.GetOrderById(id);
+                var userId = UserContextHelper.GetUserId(User)!.Value;
+                var isAdmin = UserContextHelper.IsAdmin(User);
+
+                var order = await _businessLayer.GetOrderById(id, userId, isAdmin);
                 if (order == null)
                 {
                     return NotFound(new
@@ -81,8 +69,7 @@ namespace Ecommerce_Backend.Controllers
                     });
                 }
 
-                // Get order items
-                var items = await _businessLayer.GetOrderItems(id);
+                var items = await _businessLayer.GetOrderItems(id, userId, isAdmin);
 
                 return Ok(new
                 {
@@ -104,18 +91,24 @@ namespace Ecommerce_Backend.Controllers
             }
         }
 
-        /// <summary>
-        /// Get order items
-        /// </summary>
-        /// <param name="orderId">Order ID</param>
-        /// <returns>List of order items</returns>
-        [HttpGet("{orderId}/items")]
-        [Authorize]
+        [HttpGet("{orderId:int}/items")]
         public async Task<IActionResult> GetOrderItems(int orderId)
         {
             try
             {
-                var items = await _businessLayer.GetOrderItems(orderId);
+                var userId = UserContextHelper.GetUserId(User)!.Value;
+                var isAdmin = UserContextHelper.IsAdmin(User);
+
+                var items = await _businessLayer.GetOrderItems(orderId, userId, isAdmin);
+                if (items == null)
+                {
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = "Order not found"
+                    });
+                }
+
                 return Ok(new
                 {
                     success = true,
@@ -133,25 +126,16 @@ namespace Ecommerce_Backend.Controllers
             }
         }
 
-        /// <summary>
-        /// Update order status
-        /// </summary>
-        /// <param name="id">Order ID</param>
-        /// <param name="request">Request containing new status</param>
-        /// <returns>Update response</returns>
-        [HttpPut("{id}/status")]
-        [Authorize]
+        [HttpPut("{id:int}/status")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest request)
         {
             return await _businessLayer.UpdateOrderStatus(id, request.Status);
         }
     }
 
-    /// <summary>
-    /// Request model for updating order status
-    /// </summary>
     public class UpdateOrderStatusRequest
     {
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
 }

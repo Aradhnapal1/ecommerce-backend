@@ -18,7 +18,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> UpdateCartQuantity(
             UpdateCartQuantityModel model
         );
-        Task<IActionResult> DeleteCartItem(int id);
+        Task<IActionResult> DeleteCartItem(int id, int? userId, string? ipAddress);
         Task<IActionResult> ClearCart(int? userId, string? ipAddress);
 
     }
@@ -752,30 +752,38 @@ WHERE id = @cartid";
 
 
 
-        public async Task<IActionResult> DeleteCartItem(int id)
+        public async Task<IActionResult> DeleteCartItem(int id, int? userId, string? ipAddress)
         {
             try
             {
                 using var con =
                     new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
-                string deleteQuery = @"
-DELETE FROM addcart
-WHERE id = @cartid";
+
+                string deleteQuery = userId.HasValue
+                    ? @"DELETE FROM addcart WHERE id = @cartid AND userid = @userid"
+                    : @"DELETE FROM addcart WHERE id = @cartid AND userid IS NULL AND ipaddress = @ipaddress";
 
                 using var deleteCmd =
-                    new NpgsqlCommand(
-                        deleteQuery,
-                        con
-                    );
+                    new NpgsqlCommand(deleteQuery, con);
 
-                deleteCmd.Parameters.AddWithValue(
-                    "@cartid",
-                    id
-                );
+                deleteCmd.Parameters.AddWithValue("@cartid", id);
 
-                await deleteCmd
-                    .ExecuteNonQueryAsync();
+                if (userId.HasValue)
+                    deleteCmd.Parameters.AddWithValue("@userid", userId.Value);
+                else
+                    deleteCmd.Parameters.AddWithValue("@ipaddress", ipAddress ?? "");
+
+                var rows = await deleteCmd.ExecuteNonQueryAsync();
+
+                if (rows == 0)
+                {
+                    return new NotFoundObjectResult(new
+                    {
+                        success = false,
+                        message = "Cart item not found or access denied"
+                    });
+                }
 
                 return new OkObjectResult(
                     new

@@ -8,8 +8,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     public partial interface IDatabaseLayer
     {
         Task<IActionResult> CreateOrder(CreateOrderModel model, int userId);
-        Task<List<OrderDetailsModel>> GetAllOrders();
-        Task<OrderDetailsModel> GetOrderById(int orderId);
+        Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin);
+        Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin);
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
         Task<List<OrderItemModel>> GetOrderItems(int orderId);
     }
@@ -78,6 +78,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             COALESCE(pv.mrp, p.mrp) AS mrp,
                             COALESCE(pv.variantimageurl, p.productimageurl) AS imageurl,
                             COALESCE(pv.sku, p.sku) AS sku,
+                            COALESCE(pv.stock, p.stock) AS available_stock,
                             c.color_name,
                             s.size_name
                         FROM addcart ac
@@ -97,7 +98,18 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         {
                             var quantity = (int)cartReader["quantity"];
                             var price = (decimal)cartReader["saleprice"];
+                            var availableStock = Convert.ToInt32(cartReader["available_stock"]);
                             var itemTotal = quantity * price;
+
+                            if (quantity > availableStock)
+                            {
+                                await transaction.RollbackAsync();
+                                return new BadRequestObjectResult(new
+                                {
+                                    success = false,
+                                    message = $"Insufficient stock for {cartReader["productname"]}. Available: {availableStock}"
+                                });
+                            }
 
                             cartItems.Add(new CartItemModel
                             {
@@ -263,6 +275,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     // Step 6: Create Order Items
                     foreach (var item in cartItems)
                     {
+                        var lineTotal = item.Quantity * item.Price;
+
                         var createItemQuery = @"
                             INSERT INTO order_items 
                             (orderid, productid, variantid, productname, productimageurl, sku, color, size_name, quantity, mrp, saleprice, totalprice, createdat)
@@ -282,25 +296,48 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             itemCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
                             itemCmd.Parameters.AddWithValue("@Mrp", item.MRP);
                             itemCmd.Parameters.AddWithValue("@SalePrice", item.Price);
-                            itemCmd.Parameters.AddWithValue("@TotalPrice", finalAmount);
+                            itemCmd.Parameters.AddWithValue("@TotalPrice", lineTotal);
                             itemCmd.Transaction = transaction;
 
                             await itemCmd.ExecuteNonQueryAsync();
                         }
 
                         // Step 8: Stock Deduct
-                        var deductStockQuery = @"
-                            UPDATE products 
-                            SET stock = stock - @Quantity 
-                            WHERE id = @ProductId";
+                        string deductStockQuery;
+                        if (item.VariantId > 0)
+                        {
+                            deductStockQuery = @"
+                                UPDATE product_variants 
+                                SET stock = stock - @Quantity 
+                                WHERE id = @VariantId AND stock >= @Quantity";
+                        }
+                        else
+                        {
+                            deductStockQuery = @"
+                                UPDATE products 
+                                SET stock = stock - @Quantity 
+                                WHERE id = @ProductId AND stock >= @Quantity";
+                        }
 
                         using (var deductCmd = new NpgsqlCommand(deductStockQuery, con))
                         {
                             deductCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
-                            deductCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                            if (item.VariantId > 0)
+                                deductCmd.Parameters.AddWithValue("@VariantId", item.VariantId);
+                            else
+                                deductCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
                             deductCmd.Transaction = transaction;
 
-                            await deductCmd.ExecuteNonQueryAsync();
+                            var rowsAffected = await deductCmd.ExecuteNonQueryAsync();
+                            if (rowsAffected == 0)
+                            {
+                                await transaction.RollbackAsync();
+                                return new BadRequestObjectResult(new
+                                {
+                                    success = false,
+                                    message = $"Insufficient stock for {item.ProductName}"
+                                });
+                            }
                         }
                     }
 
@@ -387,7 +424,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             }
         }
 
-        public async Task<List<OrderDetailsModel>> GetAllOrders()
+        public async Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin)
         {
             var orders = new List<OrderDetailsModel>();
 
@@ -396,11 +433,14 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                var query = @"
-                    SELECT * FROM orders 
-                    ORDER BY createdat DESC";
+                var query = isAdmin
+                    ? @"SELECT * FROM orders ORDER BY createdat DESC"
+                    : @"SELECT * FROM orders WHERE userid = @UserId ORDER BY createdat DESC";
 
                 using var cmd = new NpgsqlCommand(query, con);
+                if (!isAdmin)
+                    cmd.Parameters.AddWithValue("@UserId", userId);
+
                 using var reader = await cmd.ExecuteReaderAsync();
 
                 while (await reader.ReadAsync())
@@ -432,16 +472,21 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             return orders;
         }
 
-        public async Task<OrderDetailsModel> GetOrderById(int orderId)
+        public async Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin)
         {
             try
             {
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                var query = "SELECT * FROM orders WHERE id = @OrderId LIMIT 1";
+                var query = isAdmin
+                    ? "SELECT * FROM orders WHERE id = @OrderId LIMIT 1"
+                    : "SELECT * FROM orders WHERE id = @OrderId AND userid = @UserId LIMIT 1";
+
                 using var cmd = new NpgsqlCommand(query, con);
                 cmd.Parameters.AddWithValue("@OrderId", orderId);
+                if (!isAdmin)
+                    cmd.Parameters.AddWithValue("@UserId", userId);
 
                 using var reader = await cmd.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
@@ -465,7 +510,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     };
                 }
 
-                throw new Exception("Order not found");
+                return null;
             }
             catch (Exception ex)
             {

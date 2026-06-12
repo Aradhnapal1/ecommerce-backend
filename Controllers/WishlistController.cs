@@ -1,7 +1,7 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -11,53 +11,39 @@ namespace Ecommerce_Backend.Controllers
     {
         private readonly IBusinessLayer _businessLayer;
 
-        public WishlistController(
-            IBusinessLayer businessLayer)
+        public WishlistController(IBusinessLayer businessLayer)
         {
             _businessLayer = businessLayer;
         }
 
         [HttpPost("add")]
-        public async Task<IActionResult> AddWishlist(
-            [FromForm] WishlistModel wishlist)
+        public async Task<IActionResult> AddWishlist([FromForm] WishlistModel wishlist)
         {
-            string currentIp =
-                Request.Headers["X-Forwarded-For"]
-                .FirstOrDefault()
-                ?? HttpContext.Connection
-                .RemoteIpAddress?.ToString();
+            var currentIp = UserContextHelper.GetClientIp(HttpContext);
+            var userId = UserContextHelper.GetUserId(User);
 
-            var userIdClaim =
-                User.FindFirst(ClaimTypes.NameIdentifier);
+            wishlist.UserId = userId;
+            wishlist.IpAddress = currentIp;
 
-            if (userIdClaim != null)
-            {
-                wishlist.UserId =
-                    Convert.ToInt32(userIdClaim.Value);
-
-                // IMPORTANT
-                wishlist.IpAddress = currentIp;
-            }
-            else
-            {
-                wishlist.UserId = null;
-                wishlist.IpAddress = currentIp;
-            }
-
-            return await _businessLayer
-                .AddWishlist(wishlist);
+            return await _businessLayer.AddWishlist(wishlist);
         }
 
         [HttpGet("get")]
         public async Task<IActionResult> GetWishlist()
         {
-            return await _businessLayer.GetWishlist();
+            var userId = UserContextHelper.GetUserId(User);
+            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+
+            return await _businessLayer.GetWishlist(userId, ipAddress);
         }
 
         [HttpDelete("delete/{id}")]
-        public async Task<IActionResult>WishlistDelete(int id)
+        public async Task<IActionResult> WishlistDelete(int id)
         {
-            return await _businessLayer.WishlistDelete(id);
+            var userId = UserContextHelper.GetUserId(User);
+            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+
+            return await _businessLayer.WishlistDelete(id, userId, ipAddress);
         }
-}
+    }
 }

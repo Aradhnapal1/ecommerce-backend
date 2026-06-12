@@ -1,7 +1,9 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
-using Microsoft.AspNetCore.Mvc;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -18,7 +20,6 @@ namespace Ecommerce_Backend.Controllers
             _jwtService = jwtService;
         }
 
-        // POST api/user/register
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterRequest model)
         {
@@ -30,11 +31,8 @@ namespace Ecommerce_Backend.Controllers
                 string.IsNullOrWhiteSpace(model.role))
                 return BadRequest(new { message = "All fields are required" });
 
-            // Role check
-            var allowedRoles = new[] { "ADMIN", "USER" };
-
-            if (!allowedRoles.Contains(model.role.ToUpper()))
-                return BadRequest(new { message = "Role must be ADMIN or USER" });
+            if (!string.Equals(model.role, AuthRoles.User, StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Only USER role is allowed for self-registration" });
 
             var result = await _businessLayer.UserRegister(model);
             if (!result)
@@ -43,7 +41,6 @@ namespace Ecommerce_Backend.Controllers
             return Ok(new { message = "OTP sent to your email. Please verify to complete registration." });
         }
 
-        // POST api/user/verify-otp
         [HttpPost("verify-otp")]
         public async Task<IActionResult> VerifyOtp([FromBody] UserVerifyOtpRequest model)
         {
@@ -58,12 +55,6 @@ namespace Ecommerce_Backend.Controllers
             return Ok(new { message = "OTP verified. Registration complete!" });
         }
 
-
-
-
-
-
-        // POST api/user/login
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] UserLoginRequest model)
         {
@@ -75,9 +66,7 @@ namespace Ecommerce_Backend.Controllers
             if (user == null)
                 return Unauthorized(new { message = "Invalid credentials or account not verified" });
 
-            // ✅ JWT Token generate karo
             string token = _jwtService.GenerateToken(user);
-            user.token = token;
 
             return Ok(new
             {
@@ -86,10 +75,8 @@ namespace Ecommerce_Backend.Controllers
             });
         }
 
-
-
-        // GET api/user/get-all
         [HttpGet("get-all")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> GetAllUsers()
         {
             var users = await _businessLayer.GetAllUsers();
@@ -100,14 +87,18 @@ namespace Ecommerce_Backend.Controllers
             {
                 message = "Users fetched successfully",
                 total = users.Count,
-                users = users.Select(u => new {u.id, u.first_name, u.last_name, u.email, u.phone_number, u.role }).ToList()
+                users = users.Select(u => new { u.id, u.first_name, u.last_name, u.email, u.phone_number, u.role }).ToList()
             });
         }
 
-        // GET api/user/get/{id}
         [HttpGet("get/{id}")]
+        [Authorize]
         public async Task<IActionResult> GetUserById(int id)
         {
+            var currentUserId = UserContextHelper.GetUserId(User);
+            if (!UserContextHelper.IsAdmin(User) && currentUserId != id)
+                return Forbid();
+
             var user = await _businessLayer.GetUserById(id);
             if (user == null)
                 return NotFound(new { message = "User not found" });
@@ -120,13 +111,10 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpDelete("delete/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            var result =     await _businessLayer.DeleteUser(id);
-            if (result == null)
-                return NotFound(new { message = "User not found" });
-
-            return Ok(new { message = "User deleted successfully" });
+            return await _businessLayer.DeleteUser(id);
         }
     }
 }

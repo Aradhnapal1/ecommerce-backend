@@ -1,13 +1,14 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Ecommerce_Backend.Controllers
 {
     [ApiController]
     [Route("api/address")]
+    [Authorize]
     public class AddressController : ControllerBase
     {
         private readonly IBusinessLayer _businessLayer;
@@ -19,16 +20,10 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("add")]
-        [Authorize]
         public async Task<IActionResult> AddAddress(
             [FromBody] UserAddressModel model)
         {
-            var userId =
-                Convert.ToInt32(
-                    User.FindFirst(
-                        ClaimTypes.NameIdentifier
-                    )?.Value
-                );
+            var userId = UserContextHelper.GetUserId(User)!.Value;
 
             return await _businessLayer
                 .AddAddress(
@@ -38,15 +33,9 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpGet("list")]
-        [Authorize]
         public async Task<IActionResult> GetAddressList()
         {
-            int userId =
-                Convert.ToInt32(
-                    User.FindFirst(
-                        ClaimTypes.NameIdentifier
-                    )?.Value
-                );
+            int userId = UserContextHelper.GetUserId(User)!.Value;
 
             return await _businessLayer
                 .GetAddressList(userId);
@@ -54,30 +43,18 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpDelete("delete/{id}")]
-        [Authorize]
         public async Task<IActionResult> DeleteAddress(int id)
         {
-            int userId =
-                Convert.ToInt32(
-                    User.FindFirst(
-                        ClaimTypes.NameIdentifier
-                    )?.Value
-                );
+            int userId = UserContextHelper.GetUserId(User)!.Value;
             return await _businessLayer
                 .DeleteAddress(id, userId);
         }
         [HttpPut("update/{id}")]
-        [Authorize]
         public async Task<IActionResult> UpdateAddress(
     int id,
     [FromBody] UserAddressModel model)
         {
-            int userId =
-                Convert.ToInt32(
-                    User.FindFirst(
-                        ClaimTypes.NameIdentifier
-                    )?.Value
-                );
+            int userId = UserContextHelper.GetUserId(User)!.Value;
 
             model.Id = id;
 

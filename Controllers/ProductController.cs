@@ -1,6 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -28,6 +30,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("addproduct")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
         {
             var result = await _businessLayer.AddProduct(product);
@@ -35,6 +38,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPut("updateproduct/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
         {
             var result = await _businessLayer.UpdateProduct(id, product);
@@ -43,6 +47,7 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpDelete("deleteproduct/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteProduct(int id)
         {
             var result = await _businessLayer.DeleteProduct(id);

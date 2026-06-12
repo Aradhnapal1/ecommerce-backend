@@ -9,8 +9,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> AddWishlist(
             [FromForm] WishlistModel wishlist
         );
-         Task<IActionResult> GetWishlist();
-         Task<IActionResult> WishlistDelete(int id);
+         Task<IActionResult> GetWishlist(int? userId, string? ipAddress);
+         Task<IActionResult> WishlistDelete(int id, int? userId, string? ipAddress);
 
     }
 
@@ -270,10 +270,19 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         }
 
 
-        public async Task<IActionResult> GetWishlist()
+        public async Task<IActionResult> GetWishlist(int? userId, string? ipAddress)
         {
             try
             {
+                if (!userId.HasValue && string.IsNullOrWhiteSpace(ipAddress))
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "User or guest session required"
+                    });
+                }
+
                 var wishlist = new List<WishlistModel>();
 
                 using var con =
@@ -318,10 +327,21 @@ INNER JOIN products p
 LEFT JOIN product_variants pv
     ON pv.id = w.variantid
 
-ORDER BY w.createdat DESC";
+WHERE ";
+
+                query += userId.HasValue
+                    ? "w.userid = @userid"
+                    : "w.userid IS NULL AND w.ipaddress = @ipaddress";
+
+                query += " ORDER BY w.createdat DESC";
 
                 using var cmd =
                     new NpgsqlCommand(query, con);
+
+                if (userId.HasValue)
+                    cmd.Parameters.AddWithValue("@userid", userId.Value);
+                else
+                    cmd.Parameters.AddWithValue("@ipaddress", ipAddress ?? "");
 
                 using var reader =
                     await cmd.ExecuteReaderAsync();
@@ -471,7 +491,7 @@ ORDER BY w.createdat DESC";
         }
 
 
-        public async Task<IActionResult> WishlistDelete(int id)
+        public async Task<IActionResult> WishlistDelete(int id, int? userId, string? ipAddress)
         {
             try
             {
@@ -480,43 +500,20 @@ ORDER BY w.createdat DESC";
 
                 await con.OpenAsync();
 
-                // Check Wishlist Exists
+                string deleteQuery;
 
-                string checkQuery = @"
-            SELECT COUNT(*)
-            FROM wishlist
-            WHERE id = @id";
-
-                using var checkCmd =
-                    new NpgsqlCommand(
-                        checkQuery,
-                        con
-                    );
-
-                checkCmd.Parameters.AddWithValue(
-                    "@id",
-                    id
-                );
-
-                int count =
-                    Convert.ToInt32(
-                        await checkCmd.ExecuteScalarAsync()
-                    );
-
-                if (count == 0)
+                if (userId.HasValue)
                 {
-                    return new NotFoundObjectResult(new
-                    {
-                        success = false,
-                        message = "Wishlist item not found"
-                    });
-                }
-
-                // Delete Wishlist
-
-                string deleteQuery = @"
+                    deleteQuery = @"
             DELETE FROM wishlist
-            WHERE id = @id";
+            WHERE id = @id AND userid = @userid";
+                }
+                else
+                {
+                    deleteQuery = @"
+            DELETE FROM wishlist
+            WHERE id = @id AND userid IS NULL AND ipaddress = @ipaddress";
+                }
 
                 using var deleteCmd =
                     new NpgsqlCommand(
@@ -524,12 +521,23 @@ ORDER BY w.createdat DESC";
                         con
                     );
 
-                deleteCmd.Parameters.AddWithValue(
-                    "@id",
-                    id
-                );
+                deleteCmd.Parameters.AddWithValue("@id", id);
 
-                await deleteCmd.ExecuteNonQueryAsync();
+                if (userId.HasValue)
+                    deleteCmd.Parameters.AddWithValue("@userid", userId.Value);
+                else
+                    deleteCmd.Parameters.AddWithValue("@ipaddress", ipAddress ?? "");
+
+                var rows = await deleteCmd.ExecuteNonQueryAsync();
+
+                if (rows == 0)
+                {
+                    return new NotFoundObjectResult(new
+                    {
+                        success = false,
+                        message = "Wishlist item not found or access denied"
+                    });
+                }
 
                 return new OkObjectResult(new
                 {

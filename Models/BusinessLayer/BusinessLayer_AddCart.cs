@@ -12,7 +12,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     UpdateCartQuantityModel model
 );
 
-        Task<IActionResult> DeleteCartItem(int id);
+        Task<IActionResult> DeleteCartItem(int id, int? userId, string? ipAddress);
         Task<IActionResult> ClearCart(int? userId, string? ipAddress);
 
 
@@ -47,10 +47,10 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         }
 
 
-        public async Task<IActionResult> DeleteCartItem(int id)
+        public async Task<IActionResult> DeleteCartItem(int id, int? userId, string? ipAddress)
         {
             return await _databaseLayer
-                .DeleteCartItem(id);
+                .DeleteCartItem(id, userId, ipAddress);
         }
 
 

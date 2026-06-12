@@ -1,6 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce_Backend.Controllers
@@ -24,18 +26,21 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("addbanner")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddBanner([FromForm] BannerModel banner)
         {
             return await _businessLayer.AddBanner(banner);
         }
 
         [HttpPut("update/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateBanner(int id, [FromForm] BannerModel banner)
         {
             return await _businessLayer.UpdateBanner(id, banner);
         }
 
         [HttpDelete("delete/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteBanner(int id)
         {
             return await _businessLayer.DeleteBanner(id);

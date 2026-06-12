@@ -1,8 +1,8 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.DotNet.Scaffolding.Shared.Messaging;
-using NuGet.Protocol.Plugins;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -24,39 +24,25 @@ namespace Ecommerce_Backend.Controllers
             return Ok(result);
         }
 
-
         [HttpPost("addsize")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddSize([FromForm] SizeModel size)
         {
             return await _businessLayer.AddSize(size);
         }
 
-
-
         [HttpPut("updatesize/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateSize(int id, [FromForm] SizeModel size)
         {
-            var result = await _businessLayer.UpdateSize(id, size);
-
-
-            return Ok(new
-            {
-                status = true,
-                message = "Size updated successfully"
-
-            });
+            return await _businessLayer.UpdateSize(id, size);
         }
 
         [HttpDelete("deletesize/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> DeleteSize(int id)
         {
-            var result = await _businessLayer.DeleteSize(id);
-            return Ok(new
-            {
-                status = true,
-                message = "Size deleted successfully"
-            });
+            return await _businessLayer.DeleteSize(id);
         }
     }
-
 }
