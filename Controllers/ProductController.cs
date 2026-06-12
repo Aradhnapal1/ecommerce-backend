@@ -24,9 +24,21 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpGet("getallproducts")]
-        public async Task<IActionResult> GetAllProducts()
+        public async Task<IActionResult> GetAllProducts([FromQuery] ProductFilterRequest? filter)
         {
+            if (filter != null && filter.HasFilters())
+                return await _businessLayer.GetFilteredProducts(filter);
+
             return await _businessLayer.GetAllProducts();
+        }
+
+        /// <summary>
+        /// Filter products by category, brand, color, size, price, discount, search, sort.
+        /// </summary>
+        [HttpGet("filter")]
+        public async Task<IActionResult> FilterProducts([FromQuery] ProductFilterRequest filter)
+        {
+            return await _businessLayer.GetFilteredProducts(filter);
         }
 
         [HttpPost("addproduct")]

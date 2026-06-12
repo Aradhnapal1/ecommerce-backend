@@ -193,6 +193,38 @@ namespace Ecommerce_Backend.Models
         public DateTime UpdatedAt { get; set; }
     }
 
+    public class ProductFilterRequest
+    {
+        public int? CategoryId { get; set; }
+        public int? BrandId { get; set; }
+        public int? ColorId { get; set; }
+        public int? SizeId { get; set; }
+        public decimal? MinPrice { get; set; }
+        public decimal? MaxPrice { get; set; }
+        public decimal? MinDiscount { get; set; }
+        public bool? HasDiscount { get; set; }
+        public string? Search { get; set; }
+        public string? SortBy { get; set; }
+        public bool? InStock { get; set; }
+        public int Page { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+
+        public bool HasFilters() =>
+            CategoryId.HasValue ||
+            BrandId.HasValue ||
+            ColorId.HasValue ||
+            SizeId.HasValue ||
+            MinPrice.HasValue ||
+            MaxPrice.HasValue ||
+            MinDiscount.HasValue ||
+            HasDiscount.HasValue ||
+            InStock.HasValue ||
+            !string.IsNullOrWhiteSpace(Search) ||
+            !string.IsNullOrWhiteSpace(SortBy) ||
+            Page > 1 ||
+            PageSize != 20;
+    }
+
     public class BannerModel
     {
         public int Id { get; set; }
