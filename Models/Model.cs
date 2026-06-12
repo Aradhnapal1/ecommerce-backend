@@ -365,4 +365,11 @@ namespace Ecommerce_Backend.Models
 
         public string? CouponCode { get; set; }
     }
+
+
+    //public class CreateOrderModel
+    //{
+    //    public int AddressId { get; set; }
+    //    public string PaymentMethod { get; set; }
+    //}
 }
