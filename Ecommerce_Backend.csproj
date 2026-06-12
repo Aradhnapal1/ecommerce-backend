@@ -4,8 +4,8 @@
     LOCAL (Visual Studio):  Local.Net9.props ACTIVE, Push.Net10.props commented
     PUSH (GitHub/Server):   Local.Net9.props comment karo, Push.Net10.props uncomment karo
   -->
-  <Import Project="Configs/Local.Net9.props" />
-  <!-- <Import Project="Configs/Push.Net10.props" /> -->
+  <!-- <Import Project="Configs/Local.Net9.props" /> -->
+  <Import Project="Configs/Push.Net10.props" />
 
   <PropertyGroup>
     <Nullable>enable</Nullable>
