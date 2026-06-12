@@ -1,4 +1,4 @@
-﻿using Ecommerce_Backend.Models;
+﻿﻿using Ecommerce_Backend.Models;
 using System.Net;
 using System.Net.Mail;
 
@@ -9,6 +9,8 @@ namespace Ecommerce_Backend.Services
         Task SendOtp(string toEmail, string otp);
 
         Task SendContactNotification(ContactModel contact);
+
+        Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod);
 
     }
 
@@ -93,6 +95,42 @@ namespace Ecommerce_Backend.Services
             // Notification jaayegi admin ke email pe (appsettings se)
             mail.To.Add(smtp["FromEmail"]!);
 
+            await client.SendMailAsync(mail);
+            client.Dispose();
+        }
+
+        public async Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod)
+        {
+            var smtp = _configuration.GetSection("Smtp");
+            var client = new SmtpClient(smtp["Host"])
+            {
+                Port = int.Parse(smtp["Port"]!),
+                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                UseDefaultCredentials = false
+            };
+
+            var mail = new MailMessage
+            {
+                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
+                Subject = $"Order Confirmation - {orderNumber}",
+                Body = $@"
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
+                        <h2 style='color: #4A90E2;'>Thank you for your order!</h2>
+                        <p>Your order has been placed successfully.</p>
+                        <h3 style='border-bottom: 1px solid #eee; padding-bottom: 10px;'>Order Summary:</h3>
+                        <p><strong>Order Number:</strong> {orderNumber}</p>
+                        <p><strong>Total Amount:</strong> ₹{finalAmount}</p>
+                        <p><strong>Payment Method:</strong> {paymentMethod}</p>
+                        <br/>
+                        <p style='color: #555;'>We will notify you once your order is shipped. Thank you for shopping with us!</p>
+                    </div>
+                ",
+                IsBodyHtml = true
+            };
+
+            mail.To.Add(toEmail);
             await client.SendMailAsync(mail);
             client.Dispose();
         }

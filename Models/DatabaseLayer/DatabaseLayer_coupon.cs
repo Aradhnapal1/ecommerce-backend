@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
@@ -410,11 +410,11 @@ WHERE ac.ipaddress = @ipaddress";
 SELECT *
 FROM coupons
 WHERE
-coupon_code = @couponcode
+UPPER(coupon_code) = UPPER(@couponcode)
 AND is_active = true
-AND NOW()
-BETWEEN start_date
-AND end_date";
+AND CURRENT_DATE 
+BETWEEN DATE(start_date) 
+AND DATE(end_date)";
 
                 using var couponCmd =
                     new NpgsqlCommand(

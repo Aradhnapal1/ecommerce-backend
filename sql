@@ -221,4 +221,81 @@ CREATE TABLE coupons (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
 );
+CREATE TABLE user_addresses
+(
+    id SERIAL PRIMARY KEY,
+
+    userid INT NOT NULL,
+
+    full_name VARCHAR(200) NOT NULL,
+
+    mobile VARCHAR(20) NOT NULL,
+
+    alternate_mobile VARCHAR(20),
+
+    address_line1 TEXT NOT NULL,
+
+    address_line2 TEXT,
+
+    landmark VARCHAR(255),
+
+    city VARCHAR(100) NOT NULL,
+
+    state VARCHAR(100) NOT NULL,
+
+    country VARCHAR(100) DEFAULT 'India',
+
+    pincode VARCHAR(20) NOT NULL,
+
+    address_type VARCHAR(20) DEFAULT 'HOME',
+
+    is_default BOOLEAN DEFAULT FALSE,
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updatedat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_user_address
+    FOREIGN KEY(userid)
+    REFERENCES user_register(id)
+    ON DELETE CASCADE
+);
+CREATE TABLE order_items
+(
+    id SERIAL PRIMARY KEY,
+
+    orderid INT NOT NULL,
+
+    productid INT NOT NULL,
+
+    variantid INT,
+
+    productname VARCHAR(255),
+
+    productimageurl TEXT,
+
+    sku VARCHAR(100),
+
+    color VARCHAR(100),
+
+    size_name VARCHAR(100),
+
+    quantity INT NOT NULL,
+
+    mrp NUMERIC(10,2),
+
+    saleprice NUMERIC(10,2),
+
+    totalprice NUMERIC(10,2),
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_order_items_order
+    FOREIGN KEY(orderid)
+    REFERENCES orders(id)
+    ON DELETE CASCADE
+);
+
+
+
 

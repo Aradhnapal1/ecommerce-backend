@@ -357,12 +357,61 @@ namespace Ecommerce_Backend.Models
 
     public class CreateOrderModel
     {
-        public int UserId { get; set; }
-
         public int AddressId { get; set; }
 
         public string PaymentMethod { get; set; }
 
         public string? CouponCode { get; set; }
+    }
+
+    public class CartItemModel
+    {
+        public int Id { get; set; }
+        public int UserId { get; set; }
+        public int ProductId { get; set; }
+        public int VariantId { get; set; }
+        public int Quantity { get; set; }
+        public decimal Price { get; set; }
+        public decimal MRP { get; set; }
+        public string? ProductName { get; set; }
+        public string? ProductImageUrl { get; set; }
+        public string? SKU { get; set; }
+        public string? ColorName { get; set; }
+        public string? SizeName { get; set; }
+    }
+
+    public class OrderDetailsModel
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; }
+        public int UserId { get; set; }
+        public int AddressId { get; set; }
+        public string FullName { get; set; }
+        public string Mobile { get; set; }
+        public string PaymentMethod { get; set; }
+        public string PaymentStatus { get; set; }
+        public string OrderStatus { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal FinalAmount { get; set; }
+        public string? CouponCode { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class OrderItemModel
+    {
+        public int Id { get; set; }
+        public int OrderId { get; set; }
+        public int ProductId { get; set; }
+        public string? ProductName { get; set; }
+        public int VariantId { get; set; }
+        public int Quantity { get; set; }
+        public decimal Price { get; set; }
+        public decimal Total { get; set; }
+        public decimal MRP { get; set; }
+        public string? ProductImageUrl { get; set; }
+        public string? SKU { get; set; }
+        public string? ColorName { get; set; }
+        public string? SizeName { get; set; }
     }
 }

@@ -45,39 +45,39 @@ namespace Ecommerce_Backend.Controllers
                 .AddCart(cart);
         }
 
-        [HttpGet("list")]
-        public async Task<IActionResult> GetCart()
-        {
-            int? userId = null;
-            string? ipAddress = null;
-
-            var userClaim =
-                User.FindFirst(
-                    ClaimTypes.NameIdentifier
-                );
-
-            if (userClaim != null)
+            [HttpGet("list")]
+            public async Task<IActionResult> GetCart()
             {
-                userId =
-                    Convert.ToInt32(
-                        userClaim.Value
+                int? userId = null;
+                string? ipAddress = null;
+
+                var userClaim =
+                    User.FindFirst(
+                        ClaimTypes.NameIdentifier
+                    );
+
+                if (userClaim != null)
+                {
+                    userId =
+                        Convert.ToInt32(
+                            userClaim.Value
+                        );
+                }
+                else
+                {
+                    ipAddress =
+                        Request.Headers["X-Forwarded-For"]
+                        .FirstOrDefault()
+                        ?? HttpContext.Connection
+                        .RemoteIpAddress?.ToString();
+                }
+
+                return await _businessLayer
+                    .GetCart(
+                        userId,
+                        ipAddress
                     );
             }
-            else
-            {
-                ipAddress =
-                    Request.Headers["X-Forwarded-For"]
-                    .FirstOrDefault()
-                    ?? HttpContext.Connection
-                    .RemoteIpAddress?.ToString();
-            }
-
-            return await _businessLayer
-                .GetCart(
-                    userId,
-                    ipAddress
-                );
-        }
 
 
         [HttpPut("update-quantity")]

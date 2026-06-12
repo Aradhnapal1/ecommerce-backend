@@ -1,65 +1,374 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
+using NpgsqlTypes;
+using System;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
 {
-   public partial interface IDatabaseLayer
+    public partial interface IDatabaseLayer
     {
-        Task<IActionResult> CreateOrder(CreateOrderModel model);
+        Task<IActionResult> CreateOrder(CreateOrderModel model, int userId);
+        Task<List<OrderDetailsModel>> GetAllOrders();
+        Task<OrderDetailsModel> GetOrderById(int orderId);
+        Task<IActionResult> UpdateOrderStatus(int orderId, string status);
+        Task<List<OrderItemModel>> GetOrderItems(int orderId);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
     {
-        public async Task<IActionResult> CreateOrder(
-    CreateOrderModel model)
+        public async Task<IActionResult> CreateOrder(CreateOrderModel model, int userId)
         {
             try
             {
-                using var con =
-                    new NpgsqlConnection(DbConnection);
-
+                using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                using var transaction =
-                    await con.BeginTransactionAsync();
+                using var transaction = await con.BeginTransactionAsync();
 
                 try
                 {
-                    // Step 1
-                    // Address Fetch
+                    // Step 1: Address Fetch
+                    var addressQuery = "SELECT * FROM user_addresses WHERE id = @AddressId AND userid = @UserId LIMIT 1";
+                    UserAddressModel? address = null;
+                    
+                    using (var addressCmd = new NpgsqlCommand(addressQuery, con))
+                    {
+                        addressCmd.Parameters.AddWithValue("@AddressId", model.AddressId);
+                        addressCmd.Parameters.AddWithValue("@UserId", userId);
+                        addressCmd.Transaction = transaction;
 
-                    // Step 2
-                    // Cart Fetch
+                        using var addressReader = await addressCmd.ExecuteReaderAsync();
+                        if (await addressReader.ReadAsync())
+                        {
+                            address = new UserAddressModel
+                            {
+                                Id = (int)addressReader["id"],
+                                FullName = (string)addressReader["full_name"],
+                                Mobile = (string)addressReader["mobile"],
+                                AddressLine1 = (string)addressReader["address_line1"],
+                                AddressLine2 = addressReader["address_line2"] != DBNull.Value ? (string)addressReader["address_line2"] : null,
+                                Landmark = addressReader["landmark"] != DBNull.Value ? (string)addressReader["landmark"] : null,
+                                City = addressReader["city"] != DBNull.Value ? (string)addressReader["city"] : null,
+                                State = addressReader["state"] != DBNull.Value ? (string)addressReader["state"] : null,
+                                Country = addressReader["country"] != DBNull.Value ? (string)addressReader["country"] : null,
+                                Pincode = addressReader["pincode"] != DBNull.Value ? (string)addressReader["pincode"] : null
+                            };
+                        }
+                    }
 
-                    // Step 3
-                    // Coupon Validate
+                    if (address == null)
+                    {
+                        await transaction.RollbackAsync();
+                        return new BadRequestObjectResult(new
+                        {
+                            success = false,
+                            message = "Address not found"
+                        });
+                    }
 
-                    // Step 4
-                    // Calculate Totals
+                    // Step 2: Cart Fetch
+                    var cartItems = new List<CartItemModel>();
+                    decimal subtotal = 0;
 
-                    // Step 5
-                    // Create Order
+                    var cartQuery = @"
+                        SELECT 
+                            ac.id, ac.userid, ac.productid, ac.variantid, ac.quantity, 
+                            p.productname,
+                            COALESCE(pv.saleprice, p.saleprice) AS saleprice,
+                            COALESCE(pv.mrp, p.mrp) AS mrp,
+                            COALESCE(pv.variantimageurl, p.productimageurl) AS imageurl,
+                            COALESCE(pv.sku, p.sku) AS sku,
+                            c.color_name,
+                            s.size_name
+                        FROM addcart ac
+                        JOIN products p ON p.id = ac.productid
+                        LEFT JOIN product_variants pv ON pv.id = ac.variantid
+                        LEFT JOIN colors c ON c.id = CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER)
+                        LEFT JOIN sizes s ON s.id = CAST((COALESCE(pv.sizes, p.sizes))[1] AS INTEGER)
+                        WHERE ac.userid = @UserId";
 
-                    // Step 6
-                    // Create Order Items
+                    using (var cartCmd = new NpgsqlCommand(cartQuery, con))
+                    {
+                        cartCmd.Parameters.AddWithValue("@UserId", userId);
+                        cartCmd.Transaction = transaction;
 
-                    // Step 7
-                    // Coupon Usage
+                        using var cartReader = await cartCmd.ExecuteReaderAsync();
+                        while (await cartReader.ReadAsync())
+                        {
+                            var quantity = (int)cartReader["quantity"];
+                            var price = (decimal)cartReader["saleprice"];
+                            var itemTotal = quantity * price;
 
-                    // Step 8
-                    // Stock Deduct
+                            cartItems.Add(new CartItemModel
+                            {
+                                Id = (int)cartReader["id"],
+                                UserId = (int)cartReader["userid"],
+                                ProductId = (int)cartReader["productid"],
+                                VariantId = cartReader["variantid"] != DBNull.Value ? (int)cartReader["variantid"] : 0,
+                                Quantity = quantity,
+                                Price = price,
+                                MRP = cartReader["mrp"] != DBNull.Value ? Convert.ToDecimal(cartReader["mrp"]) : 0,
+                                ProductName = cartReader["productname"]?.ToString(),
+                                ProductImageUrl = cartReader["imageurl"]?.ToString(),
+                                SKU = cartReader["sku"]?.ToString(),
+                                ColorName = cartReader["color_name"]?.ToString(),
+                                SizeName = cartReader["size_name"]?.ToString()
+                            });
 
-                    // Stepep 9
-                    // Clear Cart
+                            subtotal += itemTotal;
+                        }
+                    }
 
+                    if (cartItems.Count == 0)
+                    {
+                        await transaction.RollbackAsync();
+                        return new BadRequestObjectResult(new
+                        {
+                            success = false,
+                            message = "Cart is empty"
+                        });
+                    }
+
+                    // Step 3: Coupon Validate
+                    decimal discountAmount = 0;
+                    int? couponId = null;
+                    string? couponCode = model.CouponCode;
+
+                    if (!string.IsNullOrEmpty(model.CouponCode))
+                    {
+                        string couponType = "";
+                        decimal couponValue = 0;
+                        decimal minOrderAmount = 0;
+                        int usageLimit = 0;
+                        bool couponFound = false;
+
+                        var couponQuery = @"
+                            SELECT * FROM coupons 
+                            WHERE UPPER(coupon_code) = UPPER(@CouponCode) 
+                            AND is_active = true 
+                            AND DATE(end_date) >= CURRENT_DATE 
+                            AND DATE(start_date) <= CURRENT_DATE
+                            LIMIT 1";
+
+                        using (var couponCmd = new NpgsqlCommand(couponQuery, con))
+                        {
+                            couponCmd.Parameters.AddWithValue("@CouponCode", model.CouponCode.Trim());
+                            couponCmd.Transaction = transaction;
+
+                            using var couponReader = await couponCmd.ExecuteReaderAsync();
+                            if (await couponReader.ReadAsync())
+                            {
+                                couponId = (int)couponReader["id"];
+                                couponType = couponReader["coupon_type"].ToString()!;
+                                couponValue = Convert.ToDecimal(couponReader["coupon_value"]);
+                                minOrderAmount = Convert.ToDecimal(couponReader["min_order_amount"]);
+                                usageLimit = Convert.ToInt32(couponReader["usage_limit"]);
+                                couponFound = true;
+                            }
+                        }
+
+                        if (couponFound)
+                        {
+                            // Min Amount check
+                            if (subtotal < minOrderAmount)
+                            {
+                                await transaction.RollbackAsync();
+                                return new BadRequestObjectResult(new { success = false, message = $"Minimum order amount should be ₹{minOrderAmount}" });
+                            }
+
+                            // Usage Limit Check
+                            var usageQuery = "SELECT COUNT(*) FROM coupon_usage WHERE couponid = @CouponId AND userid = @UserId";
+                            using (var usageCmd = new NpgsqlCommand(usageQuery, con))
+                            {
+                                usageCmd.Transaction = transaction;
+                                usageCmd.Parameters.AddWithValue("@CouponId", couponId.Value);
+                                usageCmd.Parameters.AddWithValue("@UserId", userId);
+                                int usedCount = Convert.ToInt32(await usageCmd.ExecuteScalarAsync());
+
+                                if (usedCount >= usageLimit)
+                                {
+                                    await transaction.RollbackAsync();
+                                    return new BadRequestObjectResult(new { success = false, message = "Coupon already used" });
+                                }
+                            }
+
+                            // Calculate discount
+                            if (couponType == "FLAT")
+                            {
+                                discountAmount = couponValue;
+                            }
+                            else
+                            {
+                                discountAmount = (subtotal * couponValue) / 100;
+                            }
+                        }
+                        else
+                        {
+                            await transaction.RollbackAsync();
+                            return new BadRequestObjectResult(new
+                            {
+                                success = false,
+                                message = "Invalid or expired coupon"
+                            });
+                        }
+                    }
+
+                    // Step 4: Calculate Final Amount
+                    decimal finalAmount = subtotal - discountAmount;
+
+                    // Step 5: Create Order
+                    string orderNumber = "ORD" + DateTime.Now.Ticks;
+                    int orderId = 0;
+
+                    var createOrderQuery = @"
+                        INSERT INTO orders 
+                        (order_number, userid, addressid, full_name, mobile, address_line1, 
+                         address_line2, landmark, city, state, country, pincode, 
+                         payment_method, payment_status, order_status, subtotal, 
+                         discount_amount, couponid, coupon_code, final_amount, 
+                         createdat, updatedat)
+                        VALUES 
+                        (@OrderNumber, @UserId, @AddressId, @FullName, @Mobile, @AddressLine1,
+                         @AddressLine2, @Landmark, @City, @State, @Country, @Pincode,
+                         @PaymentMethod, 'PENDING', 'PLACED', @Subtotal,
+                         @DiscountAmount, @CouponId, @CouponCode, @FinalAmount, 
+                         NOW(), NOW())
+                        RETURNING id";
+
+                    using (var createOrderCmd = new NpgsqlCommand(createOrderQuery, con))
+                    {
+                        createOrderCmd.Parameters.AddWithValue("@OrderNumber", orderNumber);
+                        createOrderCmd.Parameters.AddWithValue("@UserId", userId);
+                        createOrderCmd.Parameters.AddWithValue("@AddressId", model.AddressId);
+                        createOrderCmd.Parameters.AddWithValue("@FullName", address.FullName);
+                        createOrderCmd.Parameters.AddWithValue("@Mobile", address.Mobile);
+                        createOrderCmd.Parameters.AddWithValue("@AddressLine1", address.AddressLine1);
+                        createOrderCmd.Parameters.AddWithValue("@AddressLine2", address.AddressLine2 ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@Landmark", address.Landmark ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@City", address.City ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@State", address.State ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@Country", address.Country ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@Pincode", address.Pincode ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@PaymentMethod", model.PaymentMethod);
+                        createOrderCmd.Parameters.AddWithValue("@Subtotal", subtotal);
+                        createOrderCmd.Parameters.AddWithValue("@DiscountAmount", discountAmount);
+                        createOrderCmd.Parameters.AddWithValue("@CouponId", couponId ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@CouponCode", couponCode ?? (object)DBNull.Value);
+                        createOrderCmd.Parameters.AddWithValue("@FinalAmount", finalAmount);
+                        createOrderCmd.Transaction = transaction;
+
+                        orderId = (int)await createOrderCmd.ExecuteScalarAsync();
+                    }
+
+                    // Step 6: Create Order Items
+                    foreach (var item in cartItems)
+                    {
+                        var createItemQuery = @"
+                            INSERT INTO order_items 
+                            (orderid, productid, variantid, productname, productimageurl, sku, color, size_name, quantity, mrp, saleprice, totalprice, createdat)
+                            VALUES 
+                            (@OrderId, @ProductId, @VariantId, @ProductName, @ImageUrl, @Sku, @Color, @Size, @Quantity, @Mrp, @SalePrice, @TotalPrice, NOW())";
+
+                        using (var itemCmd = new NpgsqlCommand(createItemQuery, con))
+                        {
+                            itemCmd.Parameters.AddWithValue("@OrderId", orderId);
+                            itemCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                            itemCmd.Parameters.AddWithValue("@VariantId", item.VariantId > 0 ? (object)item.VariantId : DBNull.Value);
+                            itemCmd.Parameters.AddWithValue("@ProductName", item.ProductName ?? (object)DBNull.Value);
+                            itemCmd.Parameters.AddWithValue("@ImageUrl", item.ProductImageUrl ?? (object)DBNull.Value);
+                            itemCmd.Parameters.AddWithValue("@Sku", item.SKU ?? (object)DBNull.Value);
+                            itemCmd.Parameters.AddWithValue("@Color", item.ColorName ?? (object)DBNull.Value);
+                            itemCmd.Parameters.AddWithValue("@Size", item.SizeName ?? (object)DBNull.Value);
+                            itemCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
+                            itemCmd.Parameters.AddWithValue("@Mrp", item.MRP);
+                            itemCmd.Parameters.AddWithValue("@SalePrice", item.Price);
+                            itemCmd.Parameters.AddWithValue("@TotalPrice", finalAmount);
+                            itemCmd.Transaction = transaction;
+
+                            await itemCmd.ExecuteNonQueryAsync();
+                        }
+
+                        // Step 8: Stock Deduct
+                        var deductStockQuery = @"
+                            UPDATE products 
+                            SET stock = stock - @Quantity 
+                            WHERE id = @ProductId";
+
+                        using (var deductCmd = new NpgsqlCommand(deductStockQuery, con))
+                        {
+                            deductCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
+                            deductCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                            deductCmd.Transaction = transaction;
+
+                            await deductCmd.ExecuteNonQueryAsync();
+                        }
+                    }
+
+                    // Step 7: Coupon Usage (mark coupon as used)
+                    if (couponId.HasValue)
+                    {
+                        var couponUsageQuery = @"
+                            INSERT INTO coupon_usage 
+                            (couponid, userid, orderid)
+                            VALUES 
+                            (@CouponId, @UserId, @OrderId)";
+
+                        using (var couponUsageCmd = new NpgsqlCommand(couponUsageQuery, con))
+                        {
+                            couponUsageCmd.Parameters.AddWithValue("@CouponId", couponId.Value);
+                            couponUsageCmd.Parameters.AddWithValue("@UserId", userId);
+                            couponUsageCmd.Parameters.AddWithValue("@OrderId", orderId);
+                            couponUsageCmd.Transaction = transaction;
+
+                            await couponUsageCmd.ExecuteNonQueryAsync();
+                        }
+                    }
+
+                    // Step 9: Clear Cart
+                    var clearCartQuery = "DELETE FROM addcart WHERE userid = @UserId";
+                    using (var clearCmd = new NpgsqlCommand(clearCartQuery, con))
+                    {
+                        clearCmd.Parameters.AddWithValue("@UserId", userId);
+                        clearCmd.Transaction = transaction;
+
+                        await clearCmd.ExecuteNonQueryAsync();
+                    }
+
+                    // Commit Transaction
                     await transaction.CommitAsync();
+
+                    // Step 10: Send Order Confirmation Email
+                    try
+                    {
+                        var emailQuery = "SELECT email FROM user_register WHERE id = @UserId LIMIT 1";
+                        using var emailCmd = new NpgsqlCommand(emailQuery, con);
+                        emailCmd.Parameters.AddWithValue("@UserId", userId);
+                        var userEmail = (string?)await emailCmd.ExecuteScalarAsync();
+
+                        if (!string.IsNullOrEmpty(userEmail))
+                        {
+                            await _emailService.SendOrderConfirmationEmail(userEmail, orderNumber, finalAmount, model.PaymentMethod);
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore email errors to prevent order cancellation
+                    }
 
                     return new OkObjectResult(new
                     {
-                        success = true
+                        success = true,
+                        message = "Order created successfully",
+                        data = new
+                        {
+                            orderId = orderId,
+                            orderNumber = orderNumber,
+                            finalAmount = finalAmount,
+                            paymentMethod = model.PaymentMethod
+                        }
                     });
                 }
-                catch
+                catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
                     throw;
@@ -76,6 +385,185 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     StatusCode = 500
                 };
             }
+        }
+
+        public async Task<List<OrderDetailsModel>> GetAllOrders()
+        {
+            var orders = new List<OrderDetailsModel>();
+
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var query = @"
+                    SELECT * FROM orders 
+                    ORDER BY createdat DESC";
+
+                using var cmd = new NpgsqlCommand(query, con);
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    orders.Add(new OrderDetailsModel
+                    {
+                        Id = (int)reader["id"],
+                        OrderNumber = (string)reader["order_number"],
+                        UserId = (int)reader["userid"],
+                        AddressId = (int)reader["addressid"],
+                        FullName = (string)reader["full_name"],
+                        Mobile = (string)reader["mobile"],
+                        PaymentMethod = (string)reader["payment_method"],
+                        PaymentStatus = (string)reader["payment_status"],
+                        OrderStatus = (string)reader["order_status"],
+                        Subtotal = (decimal)reader["subtotal"],
+                        DiscountAmount = (decimal)reader["discount_amount"],
+                        FinalAmount = (decimal)reader["final_amount"],
+                        CouponCode = reader["coupon_code"] != DBNull.Value ? (string)reader["coupon_code"] : null,
+                        CreatedAt = (DateTime)reader["createdat"]
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error fetching orders: {ex.Message}");
+            }
+
+            return orders;
+        }
+
+        public async Task<OrderDetailsModel> GetOrderById(int orderId)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var query = "SELECT * FROM orders WHERE id = @OrderId LIMIT 1";
+                using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@OrderId", orderId);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    return new OrderDetailsModel
+                    {
+                        Id = (int)reader["id"],
+                        OrderNumber = (string)reader["order_number"],
+                        UserId = (int)reader["userid"],
+                        AddressId = (int)reader["addressid"],
+                        FullName = (string)reader["full_name"],
+                        Mobile = (string)reader["mobile"],
+                        PaymentMethod = (string)reader["payment_method"],
+                        PaymentStatus = (string)reader["payment_status"],
+                        OrderStatus = (string)reader["order_status"],
+                        Subtotal = (decimal)reader["subtotal"],
+                        DiscountAmount = (decimal)reader["discount_amount"],
+                        FinalAmount = (decimal)reader["final_amount"],
+                        CouponCode = reader["coupon_code"] != DBNull.Value ? (string)reader["coupon_code"] : null,
+                        CreatedAt = (DateTime)reader["createdat"]
+                    };
+                }
+
+                throw new Exception("Order not found");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error fetching order: {ex.Message}");
+            }
+        }
+
+        public async Task<IActionResult> UpdateOrderStatus(int orderId, string status)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var query = @"
+                    UPDATE orders 
+                    SET order_status = @Status, updatedat = NOW()
+                    WHERE id = @OrderId";
+
+                using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@Status", status);
+                cmd.Parameters.AddWithValue("@OrderId", orderId);
+
+                int rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                if (rowsAffected > 0)
+                {
+                    return new OkObjectResult(new
+                    {
+                        success = true,
+                        message = "Order status updated successfully"
+                    });
+                }
+
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Order not found"
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = ex.Message
+                })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
+
+        public async Task<List<OrderItemModel>> GetOrderItems(int orderId)
+        {
+            var items = new List<OrderItemModel>();
+
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var query = @"
+                    SELECT *
+                    FROM order_items
+                    WHERE orderid = @OrderId
+                    ORDER BY id ASC";
+
+                using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@OrderId", orderId);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    items.Add(new OrderItemModel
+                    {
+                        Id = (int)reader["id"],
+                        OrderId = (int)reader["orderid"],
+                        ProductId = (int)reader["productid"],
+                        VariantId = reader["variantid"] != DBNull.Value ? (int)reader["variantid"] : 0,
+                        ProductName = reader["productname"] != DBNull.Value ? (string)reader["productname"] : null,
+                        ProductImageUrl = reader["productimageurl"] != DBNull.Value ? (string)reader["productimageurl"] : null,
+                        SKU = reader["sku"] != DBNull.Value ? (string)reader["sku"] : null,
+                        ColorName = reader["color"] != DBNull.Value ? (string)reader["color"] : null,
+                        SizeName = reader["size_name"] != DBNull.Value ? (string)reader["size_name"] : null,
+                        Quantity = (int)reader["quantity"],
+                        MRP = reader["mrp"] != DBNull.Value ? (decimal)reader["mrp"] : 0,
+                        Price = reader["saleprice"] != DBNull.Value ? (decimal)reader["saleprice"] : 0,
+                        Total = reader["totalprice"] != DBNull.Value ? (decimal)reader["totalprice"] : 0
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error fetching order items: {ex.Message}");
+            }
+
+            return items;
         }
     }
 }
