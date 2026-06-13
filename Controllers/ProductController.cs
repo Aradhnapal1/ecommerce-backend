@@ -53,6 +53,12 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.SearchProducts(q, filter);
         }
 
+        [HttpGet("top-discounted")]
+        public async Task<IActionResult> GetTopDiscountedProducts()
+        {
+            return await _businessLayer.GetTopDiscountedProducts();
+        }
+
         [HttpPost("addproduct")]
         [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)

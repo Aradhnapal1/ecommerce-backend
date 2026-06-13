@@ -15,6 +15,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
         Task<ProductModel?> GetProductById(int id);
+        Task<List<ProductModel>> GetTopDiscountedProducts(int limit);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -234,6 +235,33 @@ LIMIT @pageSize OFFSET @offset";
 
                 return (products, total);
             }
+        }
+
+        public async Task<List<ProductModel>> GetTopDiscountedProducts(int limit)
+        {
+            var products = new List<ProductModel>();
+
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            var query = $@"
+SELECT
+{ProductSelectColumns}
+{ProductJoins}
+WHERE p.isactive = true AND p.discountprice > 0
+ORDER BY p.discountprice DESC NULLS LAST
+LIMIT @limit;
+";
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("limit", limit);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                products.Add(MapProduct(reader));
+            }
+
+            return products;
         }
 
         private static ProductModel MapProduct(NpgsqlDataReader reader)

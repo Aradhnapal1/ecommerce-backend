@@ -12,6 +12,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
         Task<ProductModel?> GetProductById(int id);
+        Task<IActionResult> GetTopDiscountedProducts();
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -79,6 +80,16 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             filter.UseGlobalSearch = true;
 
             return await GetFilteredProducts(filter);
+        }
+
+        public async Task<IActionResult> GetTopDiscountedProducts()
+        {
+            var products = await _databaseLayer.GetTopDiscountedProducts(9);
+            return new OkObjectResult(new
+            {
+                success = true,
+                data = products
+            });
         }
 
         public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
