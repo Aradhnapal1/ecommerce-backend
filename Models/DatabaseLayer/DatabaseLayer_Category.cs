@@ -138,6 +138,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 parent_id,
                 type,
                 category_image,
+                browsecategory,
                 is_active
             )
             VALUES
@@ -146,6 +147,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 @parent_id,
                 @type,
                 @category_image,
+                @browsecategory,
                 @is_active
             )
             RETURNING id;
@@ -168,6 +170,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 cmd.Parameters.AddWithValue(
                     "@category_image",
                     imageUrl);
+                cmd.Parameters.AddWithValue(
+                    "@browsecategory",
+                    category.BrowseCategory);
 
                 cmd.Parameters.AddWithValue(
                     "@is_active",
@@ -185,6 +190,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     parentId = category.ParentId,
                     type = category.Type,
                     categoryImage = imageUrl,
+                    browseCategory = category.BrowseCategory,
                     isActive = category.IsActive
                 });
             }
@@ -211,6 +217,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 parent_id,
                 type,
                 category_image,
+                browsecategory,
                 is_active
             FROM categories
             ORDER BY id
@@ -235,6 +242,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         CategoryImage = reader["category_image"] == DBNull.Value
                             ? null
                             : reader["category_image"]?.ToString(),
+
+                        BrowseCategory = Convert.ToBoolean(reader["browsecategory"]),
 
                         IsActive = Convert.ToBoolean(reader["is_active"]),
 
@@ -434,6 +443,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 parent_id = @parent_id,
                     type = @type,
                 category_image = @category_image,
+                 browsecategory = @browsecategory,
                 is_active = @is_active
             WHERE id = @id
         ", con);
@@ -454,6 +464,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 cmd.Parameters.AddWithValue(
                     "@category_image",
                     imageUrl);
+
+                cmd.Parameters.AddWithValue(
+                    "@browsecategory",
+                    category.BrowseCategory);
 
                 cmd.Parameters.AddWithValue(
                     "@is_active",
