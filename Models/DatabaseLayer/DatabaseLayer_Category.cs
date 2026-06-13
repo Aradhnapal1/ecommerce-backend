@@ -12,6 +12,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> GetCategories();
         Task<IActionResult> UpdateCategory(int id, [FromForm] CategoryModel category);
         Task<IActionResult> DeleteCategory(int id);
+        Task<IActionResult> GetCategoriesByTypeHome();
+        Task<IActionResult> GetCategoriesByHeroSection();
+        Task<IActionResult> GetCategoriesByBrowseCategory();
     }
     public partial class DataBaseLayer : IDatabaseLayer
     {
@@ -287,6 +290,283 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     else if (lookup.TryGetValue(category.ParentId.Value, out var parent))
                     {
                         parent.Children.Add(category);
+                    }
+                }
+
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Categories fetched successfully",
+                    data = roots
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        public async Task<IActionResult> GetCategoriesByTypeHome()
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                using var cmd = new NpgsqlCommand(@"
+            SELECT
+                id,
+                category_name,
+                slug,
+                parent_id,
+                type,
+                category_image,
+                browsecategory,
+                herosection,
+                is_active
+            FROM categories
+            WHERE type = 'Home'
+            ORDER BY id
+        ", con);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                var categories = new List<CategoryTreeModel>();
+
+                while (await reader.ReadAsync())
+                {
+                    categories.Add(new CategoryTreeModel
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        CategoryName = reader["category_name"] == DBNull.Value ? "" : reader["category_name"].ToString() ?? "",
+                        Slug = reader["slug"] == DBNull.Value ? null : reader["slug"].ToString(),
+                        ParentId = reader["parent_id"] == DBNull.Value
+                            ? null
+                            : Convert.ToInt32(reader["parent_id"]),
+
+                        Type = reader["type"] == DBNull.Value ? null : reader["type"].ToString(),
+
+                        CategoryImage = reader["category_image"] == DBNull.Value
+                            ? null
+                            : reader["category_image"].ToString(),
+
+                        BrowseCategory = reader["browsecategory"] != DBNull.Value ? Convert.ToBoolean(reader["browsecategory"]) : (bool?)null,
+                        HeroSection = reader["herosection"] != DBNull.Value && Convert.ToBoolean(reader["herosection"]),
+
+                        IsActive = reader["is_active"] != DBNull.Value && Convert.ToBoolean(reader["is_active"]),
+
+                        Children = new List<CategoryTreeModel>()
+                    });
+                }
+
+                // Fast lookup dictionary
+                var lookup = categories.ToDictionary(x => x.Id);
+
+                // Root categories
+                var roots = new List<CategoryTreeModel>();
+
+                foreach (var category in categories)
+                {
+                    if (category.ParentId == null)
+                    {
+                        roots.Add(category);
+                    }
+                    else if (lookup.TryGetValue(category.ParentId.Value, out var parent))
+                    {
+                        parent.Children.Add(category);
+                    }
+                    else
+                    {
+                        // Includes subcategories even if the strict parent isn't in 'Home' type 
+                        roots.Add(category);
+                    }
+                }
+
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Categories fetched successfully",
+                    data = roots
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        public async Task<IActionResult> GetCategoriesByHeroSection()
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                using var cmd = new NpgsqlCommand(@"
+            SELECT
+                id,
+                category_name,
+                slug,
+                parent_id,
+                type,
+                category_image,
+                browsecategory,
+                herosection,
+                is_active
+            FROM categories
+            WHERE herosection = true
+            ORDER BY id
+        ", con);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                var categories = new List<CategoryTreeModel>();
+
+                while (await reader.ReadAsync())
+                {
+                    categories.Add(new CategoryTreeModel
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        CategoryName = reader["category_name"] == DBNull.Value ? "" : reader["category_name"].ToString() ?? "",
+                        Slug = reader["slug"] == DBNull.Value ? null : reader["slug"].ToString(),
+                        ParentId = reader["parent_id"] == DBNull.Value
+                            ? null
+                            : Convert.ToInt32(reader["parent_id"]),
+
+                        Type = reader["type"] == DBNull.Value ? null : reader["type"].ToString(),
+
+                        CategoryImage = reader["category_image"] == DBNull.Value
+                            ? null
+                            : reader["category_image"].ToString(),
+
+                        BrowseCategory = reader["browsecategory"] != DBNull.Value ? Convert.ToBoolean(reader["browsecategory"]) : (bool?)null,
+                        HeroSection = reader["herosection"] != DBNull.Value && Convert.ToBoolean(reader["herosection"]),
+
+                        IsActive = reader["is_active"] != DBNull.Value && Convert.ToBoolean(reader["is_active"]),
+
+                        Children = new List<CategoryTreeModel>()
+                    });
+                }
+
+                // Fast lookup dictionary
+                var lookup = categories.ToDictionary(x => x.Id);
+
+                // Root categories
+                var roots = new List<CategoryTreeModel>();
+
+                foreach (var category in categories)
+                {
+                    if (category.ParentId == null)
+                    {
+                        roots.Add(category);
+                    }
+                    else if (lookup.TryGetValue(category.ParentId.Value, out var parent))
+                    {
+                        parent.Children.Add(category);
+                    }
+                    else
+                    {
+                        roots.Add(category);
+                    }
+                }
+
+                return new OkObjectResult(new
+                {
+                    status = true,
+                    message = "Categories fetched successfully",
+                    data = roots
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    status = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        public async Task<IActionResult> GetCategoriesByBrowseCategory()
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                using var cmd = new NpgsqlCommand(@"
+            SELECT
+                id,
+                category_name,
+                slug,
+                parent_id,
+                type,
+                category_image,
+                browsecategory,
+                herosection,
+                is_active
+            FROM categories
+            WHERE browsecategory = true
+            ORDER BY id
+        ", con);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                var categories = new List<CategoryTreeModel>();
+
+                while (await reader.ReadAsync())
+                {
+                    categories.Add(new CategoryTreeModel
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        CategoryName = reader["category_name"] == DBNull.Value ? "" : reader["category_name"].ToString() ?? "",
+                        Slug = reader["slug"] == DBNull.Value ? null : reader["slug"].ToString(),
+                        ParentId = reader["parent_id"] == DBNull.Value
+                            ? null
+                            : Convert.ToInt32(reader["parent_id"]),
+
+                        Type = reader["type"] == DBNull.Value ? null : reader["type"].ToString(),
+
+                        CategoryImage = reader["category_image"] == DBNull.Value
+                            ? null
+                            : reader["category_image"].ToString(),
+
+                        BrowseCategory = reader["browsecategory"] != DBNull.Value ? Convert.ToBoolean(reader["browsecategory"]) : (bool?)null,
+                        HeroSection = reader["herosection"] != DBNull.Value && Convert.ToBoolean(reader["herosection"]),
+
+                        IsActive = reader["is_active"] != DBNull.Value && Convert.ToBoolean(reader["is_active"]),
+
+                        Children = new List<CategoryTreeModel>()
+                    });
+                }
+
+                // Fast lookup dictionary
+                var lookup = categories.ToDictionary(x => x.Id);
+
+                // Root categories
+                var roots = new List<CategoryTreeModel>();
+
+                foreach (var category in categories)
+                {
+                    if (category.ParentId == null)
+                    {
+                        roots.Add(category);
+                    }
+                    else if (lookup.TryGetValue(category.ParentId.Value, out var parent))
+                    {
+                        parent.Children.Add(category);
+                    }
+                    else
+                    {
+                        roots.Add(category);
                     }
                 }
 

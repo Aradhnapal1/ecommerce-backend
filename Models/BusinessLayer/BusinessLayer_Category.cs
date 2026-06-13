@@ -8,6 +8,9 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> GetCategories();
         Task<IActionResult> UpdateCategory(int id, [FromForm] CategoryModel category);
         Task<IActionResult> DeleteCategory(int id);
+        Task<IActionResult> GetCategoriesByTypeHome();
+        Task<IActionResult> GetCategoriesByHeroSection();
+        Task<IActionResult> GetCategoriesByBrowseCategory();
     }
     public partial class BusinessLayer : IBusinessLayer
     {
@@ -52,6 +55,24 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 // Log the exception (not implemented here)
                 return new StatusCodeResult(500); // Internal Server Error
             }
+        }
+
+        public async Task<IActionResult> GetCategoriesByTypeHome()
+        {
+            var result = await _databaseLayer.GetCategoriesByTypeHome();
+            return result;
+        }
+
+        public async Task<IActionResult> GetCategoriesByHeroSection()
+        {
+            var result = await _databaseLayer.GetCategoriesByHeroSection();
+            return result;
+        }
+
+        public async Task<IActionResult> GetCategoriesByBrowseCategory()
+        {
+            var result = await _databaseLayer.GetCategoriesByBrowseCategory();
+            return result;
         }
 
 

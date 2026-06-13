@@ -34,6 +34,24 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.GetCategories();
         }
 
+        [HttpGet("getcategories-home")]
+        public async Task<IActionResult> GetCategoriesByTypeHome()
+        {
+            return await _businessLayer.GetCategoriesByTypeHome();
+        }
+
+        [HttpGet("getcategories-hero")]
+        public async Task<IActionResult> GetCategoriesByHeroSection()
+        {
+            return await _businessLayer.GetCategoriesByHeroSection();
+        }
+
+        [HttpGet("getcategories-browse")]
+        public async Task<IActionResult> GetCategoriesByBrowseCategory()
+        {
+            return await _businessLayer.GetCategoriesByBrowseCategory();
+        }
+
         [HttpPut("updatecategory/{id}")]
         [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> UpdateCategory(int id,[FromForm] CategoryModel category)
