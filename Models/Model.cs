@@ -42,6 +42,7 @@ namespace Ecommerce_Backend.Models
     {
         public int Id { get; set; }
         public string? SizeName { get; set; }
+        public string? Slug { get; set; }
         public DateTime CreatedAt { get; set; }
         public bool IsActive { get; set; } = true;
     }
@@ -51,6 +52,8 @@ namespace Ecommerce_Backend.Models
         public int Id { get; set; }
 
         public string ColorName { get; set; }
+
+        public string? Slug { get; set; }
 
         public string? ColorCode { get; set; }
 
@@ -75,6 +78,7 @@ namespace Ecommerce_Backend.Models
     {
         public int Id { get; set; }
         public string? BrandName { get; set; }
+        public string? Slug { get; set; }
         public string? BrandImg { get; set; }
         public bool IsActive { get; set; }
 
@@ -105,6 +109,8 @@ namespace Ecommerce_Backend.Models
 
         public string CategoryName { get; set; } = "";
 
+        public string? Slug { get; set; }
+
         public int? ParentId { get; set; }
         public string? Type { get; set; } = "";
 
@@ -122,6 +128,8 @@ namespace Ecommerce_Backend.Models
         public int Id { get; set; }
 
         public string CategoryName { get; set; } = "";
+
+        public string? Slug { get; set; }
 
         public int? ParentId { get; set; }
         public string? Type { get; set; }
@@ -186,10 +194,14 @@ namespace Ecommerce_Backend.Models
         public string? Color { get; set; }
 
         public string? BrandName { get; set; }
+        public string? BrandSlug { get; set; }
         public string? CategoryName { get; set; }
+        public string? CategorySlug { get; set; }
         public string? ColorName { get; set; }
+        public string? ColorSlug { get; set; }
 
         public List<string>? SizeNames { get; set; }
+        public List<string>? SizeSlugs { get; set; }
 
         public bool IsActive { get; set; }
 
@@ -201,12 +213,23 @@ namespace Ecommerce_Backend.Models
     {
         public int? CategoryId { get; set; }
         public int[]? CategoryIds { get; set; }
+        public string? CategorySlug { get; set; }
+        public string[]? CategorySlugs { get; set; }
+
         public int? BrandId { get; set; }
         public int[]? BrandIds { get; set; }
+        public string? BrandSlug { get; set; }
+        public string[]? BrandSlugs { get; set; }
+
         public int? ColorId { get; set; }
         public int[]? ColorIds { get; set; }
+        public string? ColorSlug { get; set; }
+        public string[]? ColorSlugs { get; set; }
+
         public int? SizeId { get; set; }
         public int[]? SizeIds { get; set; }
+        public string? SizeSlug { get; set; }
+        public string[]? SizeSlugs { get; set; }
         public decimal? MinPrice { get; set; }
         public decimal? MaxPrice { get; set; }
         public decimal? MinDiscount { get; set; }
@@ -250,11 +273,41 @@ namespace Ecommerce_Backend.Models
                 ? SizeIds
                 : SizeId.HasValue ? new[] { SizeId.Value } : Array.Empty<int>();
 
+        public string[] ResolvedCategorySlugs =>
+            NormalizeSlugs(CategorySlugs, CategorySlug);
+
+        public string[] ResolvedBrandSlugs =>
+            NormalizeSlugs(BrandSlugs, BrandSlug);
+
+        public string[] ResolvedColorSlugs =>
+            NormalizeSlugs(ColorSlugs, ColorSlug);
+
+        public string[] ResolvedSizeSlugs =>
+            NormalizeSlugs(SizeSlugs, SizeSlug);
+
+        private static string[] NormalizeSlugs(string[]? slugs, string? singleSlug)
+        {
+            if (slugs is { Length: > 0 })
+                return slugs
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s.Trim().ToLowerInvariant())
+                    .Distinct()
+                    .ToArray();
+
+            return !string.IsNullOrWhiteSpace(singleSlug)
+                ? new[] { singleSlug.Trim().ToLowerInvariant() }
+                : Array.Empty<string>();
+        }
+
         public bool HasFilters() =>
             ResolvedCategoryIds.Length > 0 ||
             ResolvedBrandIds.Length > 0 ||
             ResolvedColorIds.Length > 0 ||
             ResolvedSizeIds.Length > 0 ||
+            ResolvedCategorySlugs.Length > 0 ||
+            ResolvedBrandSlugs.Length > 0 ||
+            ResolvedColorSlugs.Length > 0 ||
+            ResolvedSizeSlugs.Length > 0 ||
             MinPrice.HasValue ||
             MaxPrice.HasValue ||
             ResolvedDiscountPercents.Length > 0 ||

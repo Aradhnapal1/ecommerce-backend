@@ -1,5 +1,6 @@
 ﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
@@ -131,10 +132,14 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 }
 
                 // Insert Category
+                var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                    con, "categories", "slug", category.CategoryName.Trim());
+
                 using var cmd = new NpgsqlCommand(@"
             INSERT INTO categories
             (
                 category_name,
+                slug,
                 parent_id,
                 type,
                 category_image,
@@ -144,6 +149,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             VALUES
             (
                 @category_name,
+                @slug,
                 @parent_id,
                 @type,
                 @category_image,
@@ -156,6 +162,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 cmd.Parameters.AddWithValue(
                     "@category_name",
                     category.CategoryName.Trim());
+
+                cmd.Parameters.AddWithValue("@slug", slug);
 
                 cmd.Parameters.AddWithValue(
                     "@parent_id",
@@ -187,6 +195,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     message = "Category added successfully",
                     id = id,
                     categoryName = category.CategoryName,
+                    slug = slug,
                     parentId = category.ParentId,
                     type = category.Type,
                     categoryImage = imageUrl,
@@ -214,6 +223,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             SELECT
                 id,
                 category_name,
+                slug,
                 parent_id,
                 type,
                 category_image,
@@ -233,6 +243,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     {
                         Id = Convert.ToInt32(reader["id"]),
                         CategoryName = reader["category_name"]?.ToString() ?? "",
+                        Slug = reader["slug"]?.ToString(),
                         ParentId = reader["parent_id"] == DBNull.Value
                             ? null
                             : Convert.ToInt32(reader["parent_id"]),
@@ -436,10 +447,14 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 }
 
                 // Update Category
+                var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                    con, "categories", "slug", category.CategoryName ?? "", id);
+
                 using var cmd = new NpgsqlCommand(@"
             UPDATE categories
             SET
                 category_name = @category_name,
+                slug = @slug,
                 parent_id = @parent_id,
                     type = @type,
                 category_image = @category_image,
@@ -451,6 +466,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 cmd.Parameters.AddWithValue(
                     "@category_name",
                     category.CategoryName ?? "");
+
+                cmd.Parameters.AddWithValue("@slug", slug);
 
                 cmd.Parameters.AddWithValue(
                     "@parent_id",
@@ -483,6 +500,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     message = "Category updated successfully",
                     id = id,
                     categoryName = category.CategoryName,
+                    slug = slug,
                     parentId = category.ParentId,
                     categoryImage = imageUrl,
                     isActive = category.IsActive

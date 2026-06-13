@@ -41,9 +41,13 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 filters = new
                 {
                     categoryIds = filter.ResolvedCategoryIds,
+                    categorySlugs = filter.ResolvedCategorySlugs,
                     brandIds = filter.ResolvedBrandIds,
+                    brandSlugs = filter.ResolvedBrandSlugs,
                     colorIds = filter.ResolvedColorIds,
+                    colorSlugs = filter.ResolvedColorSlugs,
                     sizeIds = filter.ResolvedSizeIds,
+                    sizeSlugs = filter.ResolvedSizeSlugs,
                     discountPercents = filter.ResolvedDiscountPercents,
                     filter.MinPrice,
                     filter.MaxPrice,

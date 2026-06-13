@@ -1,5 +1,6 @@
 ﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using System.Text.RegularExpressions;
@@ -18,6 +19,31 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
     public partial class DataBaseLayer : IDatabaseLayer
     {
+        private const string ProductSelectColumns = @"
+    p.*,
+    b.brand_name,
+    b.slug AS brand_slug,
+    c.category_name,
+    c.slug AS category_slug,
+    col.color_name,
+    col.slug AS color_slug,
+    (
+        SELECT ARRAY_AGG(s.size_name ORDER BY s.id)
+        FROM sizes s
+        WHERE s.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
+    ) AS size_names,
+    (
+        SELECT ARRAY_AGG(s.slug ORDER BY s.id)
+        FROM sizes s
+        WHERE s.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
+    ) AS size_slugs";
+
+        private const string ProductJoins = @"
+FROM products p
+LEFT JOIN brands b ON b.id = p.brandid
+LEFT JOIN categories c ON c.id = p.categoryid
+LEFT JOIN colors col ON col.id = p.color::INT";
+
         public async Task<List<ProductModel>> GetAllProducts()
         {
             var products = new List<ProductModel>();
@@ -25,25 +51,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = @"
+            var query = $@"
 SELECT
-    p.*,
-    b.brand_name,
-    c.category_name,
-    col.color_name,
-
-    (
-        SELECT ARRAY_AGG(s.size_name)
-        FROM sizes s
-        WHERE s.id = ANY(p.sizes)
-    ) AS size_names
-
-FROM products p
-
-LEFT JOIN brands b ON b.id = p.brandid
-LEFT JOIN categories c ON c.id = p.categoryid
-LEFT JOIN colors col ON col.id = p.color::INT
-
+{ProductSelectColumns}
+{ProductJoins}
 ORDER BY p.id DESC;
 ";
 
@@ -52,83 +63,7 @@ ORDER BY p.id DESC;
 
             while (await reader.ReadAsync())
             {
-                var product = new ProductModel
-                {
-                    Id = reader.GetInt32(reader.GetOrdinal("id")),
-                    ProductName = reader["productname"]?.ToString(),
-                    Slug = reader["slug"]?.ToString(),
-                    Type = reader["type"]?.ToString(),
-                    ShortDescription = reader["shortdescription"]?.ToString(),
-                    Description = reader["description"]?.ToString(),
-                    SKU = reader["sku"]?.ToString(),
-
-                    BrandId = reader.IsDBNull(reader.GetOrdinal("brandid"))
-                        ? null
-                        : reader.GetInt32(reader.GetOrdinal("brandid")),
-
-                    CategoryId = reader.IsDBNull(reader.GetOrdinal("categoryid"))
-                        ? null
-                        : reader.GetInt32(reader.GetOrdinal("categoryid")),
-
-                    BasePrice = reader.IsDBNull(reader.GetOrdinal("baseprice"))
-                        ? 0
-                        : reader.GetDecimal(reader.GetOrdinal("baseprice")),
-
-                    MRP = reader.IsDBNull(reader.GetOrdinal("mrp"))
-                        ? 0
-                        : reader.GetDecimal(reader.GetOrdinal("mrp")),
-
-                    DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice"))
-                        ? null
-                        : reader.GetDecimal(reader.GetOrdinal("discountprice")),
-
-                    SalePrice = reader.IsDBNull(reader.GetOrdinal("saleprice"))
-                        ? 0
-                        : reader.GetDecimal(reader.GetOrdinal("saleprice")),
-
-                    GST = reader.IsDBNull(reader.GetOrdinal("gst"))
-                        ? 0
-                        : reader.GetDecimal(reader.GetOrdinal("gst")),
-
-                    Stock = reader.IsDBNull(reader.GetOrdinal("stock"))
-                        ? 0
-                        : reader.GetInt32(reader.GetOrdinal("stock")),
-
-                    ProductImageUrl = reader["productimageurl"]?.ToString(),
-
-                    GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
-                        ? Array.Empty<string>()
-                        : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
-
-                    // ✅ FIXED: INT[] SAFE READ
-                    Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
-                        ? Array.Empty<int>()
-                        : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
-
-                    Color = reader["color"]?.ToString(),
-
-                    IsActive = reader.IsDBNull(reader.GetOrdinal("isactive"))
-                        ? false
-                        : reader.GetBoolean(reader.GetOrdinal("isactive")),
-
-                    CreatedAt = reader.IsDBNull(reader.GetOrdinal("createdat"))
-                        ? DateTime.MinValue
-                        : reader.GetDateTime(reader.GetOrdinal("createdat")),
-
-                    UpdatedAt = reader.IsDBNull(reader.GetOrdinal("updatedat"))
-                        ? DateTime.MinValue
-                        : reader.GetDateTime(reader.GetOrdinal("updatedat")),
-
-                    BrandName = reader["brand_name"]?.ToString(),
-                    CategoryName = reader["category_name"]?.ToString(),
-                    ColorName = reader["color_name"]?.ToString(),
-
-                    SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
-                        ? new List<string>()
-                        : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
-                };
-
-                products.Add(product);
+                products.Add(MapProduct(reader));
             }
 
             return products;
@@ -141,19 +76,34 @@ ORDER BY p.id DESC;
             var whereClauses = new List<string> { "p.isactive = true" };
             var parameters = new List<NpgsqlParameter>();
 
-            if (filter.ResolvedCategoryIds.Length > 0)
+            if (filter.ResolvedCategorySlugs.Length > 0)
+            {
+                whereClauses.Add("c.slug = ANY(@categorySlugs)");
+                parameters.Add(new NpgsqlParameter("categorySlugs", filter.ResolvedCategorySlugs));
+            }
+            else if (filter.ResolvedCategoryIds.Length > 0)
             {
                 whereClauses.Add("p.categoryid = ANY(@categoryIds)");
                 parameters.Add(new NpgsqlParameter("categoryIds", filter.ResolvedCategoryIds));
             }
 
-            if (filter.ResolvedBrandIds.Length > 0)
+            if (filter.ResolvedBrandSlugs.Length > 0)
+            {
+                whereClauses.Add("b.slug = ANY(@brandSlugs)");
+                parameters.Add(new NpgsqlParameter("brandSlugs", filter.ResolvedBrandSlugs));
+            }
+            else if (filter.ResolvedBrandIds.Length > 0)
             {
                 whereClauses.Add("p.brandid = ANY(@brandIds)");
                 parameters.Add(new NpgsqlParameter("brandIds", filter.ResolvedBrandIds));
             }
 
-            if (filter.ResolvedColorIds.Length > 0)
+            if (filter.ResolvedColorSlugs.Length > 0)
+            {
+                whereClauses.Add("col.slug = ANY(@colorSlugs)");
+                parameters.Add(new NpgsqlParameter("colorSlugs", filter.ResolvedColorSlugs));
+            }
+            else if (filter.ResolvedColorIds.Length > 0)
             {
                 whereClauses.Add("p.color = ANY(@colorIds)");
                 parameters.Add(new NpgsqlParameter(
@@ -161,7 +111,18 @@ ORDER BY p.id DESC;
                     filter.ResolvedColorIds.Select(id => id.ToString()).ToArray()));
             }
 
-            if (filter.ResolvedSizeIds.Length > 0)
+            if (filter.ResolvedSizeSlugs.Length > 0)
+            {
+                whereClauses.Add(@"
+EXISTS (
+    SELECT 1
+    FROM sizes sz
+    WHERE sz.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
+      AND sz.slug = ANY(@sizeSlugs)
+)");
+                parameters.Add(new NpgsqlParameter("sizeSlugs", filter.ResolvedSizeSlugs));
+            }
+            else if (filter.ResolvedSizeIds.Length > 0)
             {
                 whereClauses.Add("p.sizes && @sizeIds");
                 parameters.Add(new NpgsqlParameter("sizeIds", filter.ResolvedSizeIds));
@@ -210,8 +171,11 @@ ORDER BY p.id DESC;
                         OR p.shortdescription ILIKE @search
                         OR p.description ILIKE @search
                         OR b.brand_name ILIKE @search
+                        OR b.slug ILIKE @search
                         OR c.category_name ILIKE @search
+                        OR c.slug ILIKE @search
                         OR col.color_name ILIKE @search
+                        OR col.slug ILIKE @search
                     )"
                     : @"(p.productname ILIKE @search OR p.sku ILIKE @search OR p.slug ILIKE @search)";
 
@@ -236,11 +200,7 @@ ORDER BY p.id DESC;
             var pageSize = filter.PageSize < 1 ? 20 : Math.Min(filter.PageSize, 100);
             var offset = (page - 1) * pageSize;
 
-            var baseFrom = @"
-FROM products p
-LEFT JOIN brands b ON b.id = p.brandid
-LEFT JOIN categories c ON c.id = p.categoryid
-LEFT JOIN colors col ON col.id = p.color::INT";
+            var baseFrom = ProductJoins;
 
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
@@ -255,15 +215,7 @@ LEFT JOIN colors col ON col.id = p.color::INT";
 
                 var dataQuery = $@"
 SELECT
-    p.*,
-    b.brand_name,
-    c.category_name,
-    col.color_name,
-    (
-        SELECT ARRAY_AGG(s.size_name)
-        FROM sizes s
-        WHERE s.id = ANY(p.sizes)
-    ) AS size_names
+{ProductSelectColumns}
 {baseFrom}
 WHERE {whereSql}
 ORDER BY {orderBy}
@@ -336,11 +288,17 @@ LIMIT @pageSize OFFSET @offset";
                     ? DateTime.MinValue
                     : reader.GetDateTime(reader.GetOrdinal("updatedat")),
                 BrandName = reader["brand_name"]?.ToString(),
+                BrandSlug = reader["brand_slug"]?.ToString(),
                 CategoryName = reader["category_name"]?.ToString(),
+                CategorySlug = reader["category_slug"]?.ToString(),
                 ColorName = reader["color_name"]?.ToString(),
+                ColorSlug = reader["color_slug"]?.ToString(),
                 SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
                     ? new List<string>()
-                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList(),
+                SizeSlugs = reader.IsDBNull(reader.GetOrdinal("size_slugs"))
+                    ? new List<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_slugs")).ToList()
             };
         }
 
@@ -370,37 +328,8 @@ LIMIT @pageSize OFFSET @offset";
                 var cloudinary = new Cloudinary(account);
 
                 // ================= SLUG =================
-                string GenerateSlug(string text)
-                {
-                    if (string.IsNullOrWhiteSpace(text)) return "";
-
-                    text = text.ToLower().Trim();
-                    text = Regex.Replace(text, @"[^a-z0-9\s-]", "");
-                    text = Regex.Replace(text, @"\s+", "-");
-                    text = Regex.Replace(text, @"-+", "-");
-
-                    return text;
-                }
-
-                string slug = GenerateSlug(product.ProductName);
-
-                string originalSlug = slug;
-                int counter = 1;
-
-                while (true)
-                {
-                    using var checkCmd = new NpgsqlCommand(
-                        "SELECT COUNT(*) FROM products WHERE slug = @Slug", con);
-
-                    checkCmd.Parameters.AddWithValue("Slug", slug);
-
-                    var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
-
-                    if (count == 0) break;
-
-                    slug = $"{originalSlug}-{counter}";
-                    counter++;
-                }
+                string slug = await SlugHelper.GenerateUniqueSlugAsync(
+                    con, "products", "slug", product.ProductName);
 
                 // ================= MAIN IMAGE =================
                 string productImageUrl = null;
@@ -917,25 +846,10 @@ WHERE id=@id", con);
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            var query = @"
+            var query = $@"
 SELECT 
-    p.*,
-    b.brand_name,
-    c.category_name,
-    col.color_name,
-
-    (
-        SELECT ARRAY_AGG(s.size_name)
-        FROM sizes s
-        WHERE s.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
-    ) AS size_names
-
-FROM products p
-
-LEFT JOIN brands b ON b.id = p.brandid
-LEFT JOIN categories c ON c.id = p.categoryid
-LEFT JOIN colors col ON col.id = p.color::INT
-
+{ProductSelectColumns}
+{ProductJoins}
 WHERE p.id = @id;
 ";
 
@@ -947,65 +861,7 @@ WHERE p.id = @id;
             if (!await reader.ReadAsync())
                 return null;
 
-            var product = new ProductModel
-            {
-                Id = reader.GetInt32(reader.GetOrdinal("id")),
-                ProductName = reader["productname"]?.ToString(),
-                Slug = reader["slug"]?.ToString(),
-                Type = reader["type"]?.ToString(),
-                ShortDescription = reader["shortdescription"]?.ToString(),
-                Description = reader["description"]?.ToString(),
-                SKU = reader["sku"]?.ToString(),
-
-                BrandId = reader.IsDBNull(reader.GetOrdinal("brandid"))
-                    ? null
-                    : reader.GetInt32(reader.GetOrdinal("brandid")),
-
-                CategoryId = reader.IsDBNull(reader.GetOrdinal("categoryid"))
-                    ? null
-                    : reader.GetInt32(reader.GetOrdinal("categoryid")),
-
-                BasePrice = reader.GetDecimal(reader.GetOrdinal("baseprice")),
-                MRP = reader.GetDecimal(reader.GetOrdinal("mrp")),
-
-                DiscountPrice = reader.IsDBNull(reader.GetOrdinal("discountprice"))
-                    ? null
-                    : reader.GetDecimal(reader.GetOrdinal("discountprice")),
-
-                SalePrice = reader.GetDecimal(reader.GetOrdinal("saleprice")),
-                GST = reader.GetDecimal(reader.GetOrdinal("gst")),
-                Stock = reader.GetInt32(reader.GetOrdinal("stock")),
-
-                ProductImageUrl = reader["productimageurl"]?.ToString(),
-
-                Color = reader["color"]?.ToString(),
-
-                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
-                CreatedAt = reader.GetDateTime(reader.GetOrdinal("createdat")),
-                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updatedat")),
-
-                BrandName = reader.IsDBNull(reader.GetOrdinal("brand_name"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("brand_name")),
-
-                CategoryName = reader.IsDBNull(reader.GetOrdinal("category_name"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("category_name")),
-
-                ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("color_name")),
-
-                SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
-                    ? new List<string>()
-                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList(),
-
-                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
-                    ? Array.Empty<int>()
-                    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"))
-            };
-
-            return product;
+            return MapProduct(reader);
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Ecommerce_Backend.Helpers;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using System.Data.Common;
 
@@ -25,6 +26,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 SELECT
                     id,
                     size_name,
+                    slug,
                     created_at,
                     is_active
                 FROM sizes
@@ -39,6 +41,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     Id = Convert.ToInt32(reader["id"]),
                     SizeName = reader["size_name"]?.ToString(),
+                    Slug = reader["slug"]?.ToString(),
                     CreatedAt = Convert.ToDateTime(reader["created_at"]),
                     IsActive = Convert.ToBoolean(reader["is_active"])
                 });
@@ -73,13 +76,17 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 });
             }
 
+            var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                connection, "sizes", "slug", size.SizeName ?? "");
+
             using var command = new NpgsqlCommand(@"
-        INSERT INTO sizes (size_name, created_at, is_active)
-        VALUES (@size_name, @created_at, @is_active)
+        INSERT INTO sizes (size_name, slug, created_at, is_active)
+        VALUES (@size_name, @slug, @created_at, @is_active)
         RETURNING id;
     ", connection);
 
             command.Parameters.AddWithValue("@size_name", size.SizeName ?? "");
+            command.Parameters.AddWithValue("@slug", slug);
             command.Parameters.AddWithValue("@created_at", DateTime.UtcNow);
             command.Parameters.AddWithValue("@is_active", true);
 
@@ -88,7 +95,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             return new OkObjectResult(new
             {
                 status = true,
-                message = "Size added successfully"
+                message = "Size added successfully",
+                slug
             });
         }
 
@@ -97,13 +105,18 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         {
             using var connection = new NpgsqlConnection(DbConnection);
             await connection.OpenAsync();
+            var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                connection, "sizes", "slug", size.SizeName ?? string.Empty, id);
+
             using var command = new NpgsqlCommand(@"
                 UPDATE sizes
                 SET size_name = @size_name,
+                    slug = @slug,
                     is_active = @is_active
                 WHERE id = @id;
             ", connection);
             command.Parameters.AddWithValue("@size_name", size.SizeName ?? string.Empty);
+            command.Parameters.AddWithValue("@slug", slug);
             command.Parameters.AddWithValue("@is_active", size.IsActive);
             command.Parameters.AddWithValue("@id", id);
             var rowsAffected = await command.ExecuteNonQueryAsync();
@@ -111,7 +124,14 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             {
                 return new NotFoundObjectResult($"Size with ID {id} not found.");
             }
-            return new OkObjectResult(size);
+            return new OkObjectResult(new
+            {
+                status = true,
+                id,
+                sizeName = size.SizeName,
+                slug,
+                isActive = size.IsActive
+            });
         }
 
 

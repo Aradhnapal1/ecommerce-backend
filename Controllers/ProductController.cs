@@ -43,7 +43,7 @@ namespace Ecommerce_Backend.Controllers
 
         /// <summary>
         /// Global product search — name, SKU, slug, description, brand, category, color.
-        /// Combine with multi-select filters: categoryIds, brandIds, colorIds, sizeIds, discountPercents.
+        /// Combine with multi-select filters: categorySlugs, brandSlugs, colorSlugs, sizeSlugs (or legacy *Ids).
         /// </summary>
         [HttpGet("search")]
         public async Task<IActionResult> SearchProducts(

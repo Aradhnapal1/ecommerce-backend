@@ -1,5 +1,6 @@
 ﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
@@ -80,16 +81,21 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 }
 
                 // Insert Brand
+                var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                    con, "brands", "slug", brand.BrandName ?? "");
+
                 using var cmd = new NpgsqlCommand(@"
                     INSERT INTO brands
                     (
                         brand_name,
+                        slug,
                         brand_img,
                         is_active
                     )
                     VALUES
                     (
                         @brand_name,
+                        @slug,
                         @brand_img,
                         @is_active
                     )
@@ -97,6 +103,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 ", con);
 
                 cmd.Parameters.AddWithValue("@brand_name", brand.BrandName ?? "");
+                cmd.Parameters.AddWithValue("@slug", slug);
                 cmd.Parameters.AddWithValue("@brand_img", imageUrl);
                 cmd.Parameters.AddWithValue("@is_active", brand.IsActive);
 
@@ -108,6 +115,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     message = "Brand added successfully",
                     id = id,
                     brandName = brand.BrandName,
+                    slug = slug,
                     brandImage = imageUrl,
                     isActive = brand.IsActive
                 });
@@ -131,7 +139,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
                 using var cmd = new NpgsqlCommand(
-                    "SELECT id, brand_name, brand_img, is_active FROM brands",
+                    "SELECT id, brand_name, slug, brand_img, is_active FROM brands",
                     con
                 );
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -141,8 +149,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     {
                         Id = reader.GetInt32(0),
                         BrandName = reader.GetString(1),
-                        BrandImg = reader.GetString(2),
-                        IsActive = reader.GetBoolean(3)
+                        Slug = reader.GetString(2),
+                        BrandImg = reader.GetString(3),
+                        IsActive = reader.GetBoolean(4)
                     });
                 }
                 return new OkObjectResult(new
@@ -271,14 +280,19 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     imageUrl = uploadResult.SecureUrl.ToString();
                 }
                 // Update Brand
+                var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                    con, "brands", "slug", brand.BrandName ?? "", id);
+
                 using var cmd = new NpgsqlCommand(@"
                     UPDATE brands SET
                     brand_name=@brand_name,
+                    slug=@slug,
                     brand_img=@brand_img,
                     is_active=@is_active
                     WHERE id=@id;
                 ", con);
                 cmd.Parameters.AddWithValue("@brand_name", brand.BrandName ?? "");
+                cmd.Parameters.AddWithValue("@slug", slug);
                 cmd.Parameters.AddWithValue("@brand_img", imageUrl);
                 cmd.Parameters.AddWithValue("@is_active", brand.IsActive);
                 cmd.Parameters.AddWithValue("@id", id);
@@ -289,6 +303,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     message = "Brand updated successfully",
                     id = id,
                     brandName = brand.BrandName,
+                    slug = slug,
                     brandImage = imageUrl,
                 });
             }

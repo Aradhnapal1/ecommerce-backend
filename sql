@@ -14,6 +14,7 @@ CREATE TABLE user_register
 CREATE TABLE sizes (
     id SERIAL PRIMARY KEY,
     size_name VARCHAR(20) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE
 )
@@ -21,6 +22,7 @@ CREATE TABLE sizes (
 CREATE TABLE colors (
     id SERIAL PRIMARY KEY,
     color_name VARCHAR(100) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
     color_code VARCHAR(20),
     status BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -34,6 +36,7 @@ CREATE TABLE brands
 (
     id SERIAL PRIMARY KEY,
     brand_name VARCHAR(200) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
     brand_img TEXT NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -45,6 +48,7 @@ CREATE TABLE categories
     id SERIAL PRIMARY KEY,
 
     category_name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
 
     parent_id INT NULL,
 

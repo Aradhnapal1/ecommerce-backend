@@ -1,4 +1,5 @@
-﻿using Npgsql;
+﻿using Ecommerce_Backend.Helpers;
+using Npgsql;
 using System.Data.Common;
 using System.Drawing;
 using System.Text.Json;
@@ -23,8 +24,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             await con.OpenAsync();
 
             using var cmd = new NpgsqlCommand(
-                // ✅ color_code bhi select karo
-                "SELECT id, color_name, color_code, status, created_at FROM colors",
+                "SELECT id, color_name, slug, color_code, status, created_at FROM colors",
                 con
             );
 
@@ -36,9 +36,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     Id = reader.GetInt32(0),
                     ColorName = reader.GetString(1),
-                    ColorCode = reader.GetString(2),  // ✅ index 2
-                    Status = reader.GetBoolean(3),     // ✅ index 3
-                    CreatedAt = reader.GetDateTime(4)  // ✅ index 4
+                    Slug = reader.GetString(2),
+                    ColorCode = reader.GetString(3),
+                    Status = reader.GetBoolean(4),
+                    CreatedAt = reader.GetDateTime(5)
                 });
             }
 
@@ -146,14 +147,17 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                     // Dynamic color code — API se aa raha hai
                     string colorCode = await GetColorCode(color.ColorName);
+                    var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                        con, "colors", "slug", color.ColorName);
 
                     using var cmd = new NpgsqlCommand(@"
-                INSERT INTO colors (color_name, color_code, status)
-                VALUES (@color_name, @color_code, @status)
+                INSERT INTO colors (color_name, slug, color_code, status)
+                VALUES (@color_name, @slug, @color_code, @status)
                 RETURNING id, created_at;
             ", con);
 
                     cmd.Parameters.AddWithValue("@color_name", color.ColorName);
+                    cmd.Parameters.AddWithValue("@slug", slug);
                     cmd.Parameters.AddWithValue("@color_code", colorCode);
                     cmd.Parameters.AddWithValue("@status", color.Status);
 
@@ -165,6 +169,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     {
                         Id = reader.GetInt32(0),
                         ColorName = color.ColorName,
+                        Slug = slug,
                         ColorCode = colorCode,
                         Status = color.Status,
                         CreatedAt = reader.GetDateTime(1)
@@ -187,16 +192,19 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
             // Dynamic color code — API se aa raha hai
             string colorCode = await GetColorCode(color.ColorName);
+            var slug = await SlugHelper.GenerateUniqueSlugAsync(
+                con, "colors", "slug", color.ColorName, id);
 
             using var cmd = new NpgsqlCommand(@"
         UPDATE colors
-        SET color_name=@color_name, color_code=@color_code, status=@status
+        SET color_name=@color_name, slug=@slug, color_code=@color_code, status=@status
         WHERE id=@id
         RETURNING id, created_at;
     ", con);
 
             cmd.Parameters.AddWithValue("@id", id);
             cmd.Parameters.AddWithValue("@color_name", color.ColorName);
+            cmd.Parameters.AddWithValue("@slug", slug);
             cmd.Parameters.AddWithValue("@color_code", colorCode);
             cmd.Parameters.AddWithValue("@status", color.Status);
 
@@ -208,6 +216,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             {
                 Id = reader.GetInt32(0),
                 ColorName = color.ColorName,
+                Slug = slug,
                 ColorCode = colorCode,
                 Status = color.Status,
                 CreatedAt = reader.GetDateTime(1)
@@ -220,7 +229,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             await con.OpenAsync();
             // Check if color exists
             using (var checkCmd = new NpgsqlCommand(
-                "SELECT id, color_name, color_code, status, created_at FROM colors WHERE id=@id", con))
+                "SELECT id, color_name, slug, color_code, status, created_at FROM colors WHERE id=@id", con))
             {
                 checkCmd.Parameters.AddWithValue("@id", id);
                 using var reader = await checkCmd.ExecuteReaderAsync();
@@ -230,9 +239,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     Id = reader.GetInt32(0),
                     ColorName = reader.GetString(1),
-                    ColorCode = reader.GetString(2),
-                    Status = reader.GetBoolean(3),
-                    CreatedAt = reader.GetDateTime(4)
+                    Slug = reader.GetString(2),
+                    ColorCode = reader.GetString(3),
+                    Status = reader.GetBoolean(4),
+                    CreatedAt = reader.GetDateTime(5)
                 };
                 reader.Close();
                 // Delete the color
