@@ -144,6 +144,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 type,
                 category_image,
                 browsecategory,
+                herosection,
                 is_active
             )
             VALUES
@@ -154,6 +155,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 @type,
                 @category_image,
                 @browsecategory,
+                @herosection,
                 @is_active
             )
             RETURNING id;
@@ -182,6 +184,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     "@browsecategory",
                     category.BrowseCategory);
 
+
+                cmd.Parameters.AddWithValue(
+                    "@herosection", category.HeroSection
+                    );
+
                 cmd.Parameters.AddWithValue(
                     "@is_active",
                     category.IsActive);
@@ -200,6 +207,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     type = category.Type,
                     categoryImage = imageUrl,
                     browseCategory = category.BrowseCategory,
+                    heroSection = category.HeroSection,
                     isActive = category.IsActive
                 });
             }
@@ -228,6 +236,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 type,
                 category_image,
                 browsecategory,
+                heroSection,
                 is_active
             FROM categories
             ORDER BY id
@@ -255,6 +264,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             : reader["category_image"]?.ToString(),
 
                         BrowseCategory = Convert.ToBoolean(reader["browsecategory"]),
+                        HeroSection = Convert.ToBoolean(reader["heroSection"]),
 
                         IsActive = Convert.ToBoolean(reader["is_active"]),
 
@@ -459,6 +469,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     type = @type,
                 category_image = @category_image,
                  browsecategory = @browsecategory,
+                heroSection = @heroSection,
                 is_active = @is_active
             WHERE id = @id
         ", con);
@@ -487,6 +498,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     category.BrowseCategory);
 
                 cmd.Parameters.AddWithValue(
+                    "@herosection",
+                    category.HeroSection);
+
+                cmd.Parameters.AddWithValue(
                     "@is_active",
                     category.IsActive);
 
@@ -503,6 +518,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     slug = slug,
                     parentId = category.ParentId,
                     categoryImage = imageUrl,
+                    heroSection = category.HeroSection,
+                    browseCategory = category.BrowseCategory,
                     isActive = category.IsActive
                 });
             }

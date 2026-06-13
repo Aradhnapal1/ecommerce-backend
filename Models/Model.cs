@@ -120,6 +120,7 @@ namespace Ecommerce_Backend.Models
         // Upload ke liye file
         public IFormFile? CategoryFile { get; set; }
         public bool? BrowseCategory { get; set; }
+        public bool HeroSection { get; set; }
 
         public bool IsActive { get; set; }
     }
@@ -136,6 +137,7 @@ namespace Ecommerce_Backend.Models
 
         public string? CategoryImage { get; set; }
         public bool? BrowseCategory { get; set; }
+        public bool HeroSection { get; set; }
 
         public bool IsActive { get; set; }
 
