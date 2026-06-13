@@ -1,11 +1,13 @@
-# Use stable .NET 10 (NOT nightly/preview)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY Ecommerce_Backend.csproj .
+COPY Configs ./Configs
+
 RUN dotnet restore Ecommerce_Backend.csproj
 
 COPY . .
+
 RUN dotnet publish Ecommerce_Backend.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
