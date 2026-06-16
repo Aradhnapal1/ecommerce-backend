@@ -26,6 +26,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpGet("all")]
+        [Authorize]
         public async Task<IActionResult> GetAllOrders()
         {
             try
@@ -52,6 +53,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpGet("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> GetOrderById(int id)
         {
             try
