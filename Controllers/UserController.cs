@@ -154,7 +154,7 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> GetProfile()
         {
             var userId = UserContextHelper.GetUserId(User)!.Value;
-            return await GetUserById(userId);
+            return await _businessLayer.GetUserProfile(userId);
         }
 
         [HttpPut("update-profile")]

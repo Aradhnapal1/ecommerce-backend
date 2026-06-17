@@ -16,6 +16,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> ResetPassword(ResetPasswordRequest model);
         Task<IActionResult> ChangePassword(int userId, ChangePasswordRequest model);
         Task<IActionResult> UpdateProfile(int userId, UpdateProfileRequest model);
+        Task<IActionResult> GetUserProfile(int userId);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -95,6 +96,15 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             }
 
             return await _databaseLayer.UpdateProfile(userId, model);
+        }
+
+        public async Task<IActionResult> GetUserProfile(int userId)
+        {
+            if (userId <= 0)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Invalid user ID." });
+            }
+            return await _databaseLayer.GetUserProfile(userId);
         }
     }
 }

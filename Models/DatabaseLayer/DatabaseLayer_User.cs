@@ -21,6 +21,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> ResetPassword(ResetPasswordRequest model);
         Task<IActionResult> ChangePassword(int userId, ChangePasswordRequest model);
         Task<IActionResult> UpdateProfile(int userId, UpdateProfileRequest model);
+        Task<IActionResult> GetUserProfile(int userId);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -455,6 +456,51 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 if (rowsAffected > 0)
                 {
                     return new OkObjectResult(new { success = true, message = "Profile updated successfully." });
+                }
+
+                return new NotFoundObjectResult(new { success = false, message = "User not found." });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+            }
+        }
+
+        public async Task<IActionResult> GetUserProfile(int userId)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var query = @"
+                    SELECT id, first_name, last_name, email, phone_number, role, is_verified,
+                           profile_image_url, date_of_birth, gender
+                    FROM user_register 
+                    WHERE id = @UserId AND is_verified = TRUE LIMIT 1";
+
+                using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@UserId", userId);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                if (await reader.ReadAsync())
+                {
+                    return new OkObjectResult(new {
+                        success = true,
+                        message = "User profile fetched successfully.",
+                        data = new {
+                            id = reader.GetInt32(reader.GetOrdinal("id")),
+                            firstName = reader.GetString(reader.GetOrdinal("first_name")),
+                            lastName = reader.GetString(reader.GetOrdinal("last_name")),
+                            email = reader.GetString(reader.GetOrdinal("email")),
+                            phoneNumber = reader.GetString(reader.GetOrdinal("phone_number")),
+                            role = reader.GetString(reader.GetOrdinal("role")),
+                            profileImageUrl = reader.IsDBNull(reader.GetOrdinal("profile_image_url")) ? null : reader.GetString(reader.GetOrdinal("profile_image_url")),
+                            dateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
+                            gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"))
+                        }
+                    });
                 }
 
                 return new NotFoundObjectResult(new { success = false, message = "User not found." });

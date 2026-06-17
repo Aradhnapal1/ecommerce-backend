@@ -148,6 +148,20 @@ namespace Ecommerce_Backend.Controllers
             var userId = UserContextHelper.GetUserId(User)!.Value;
             return await _businessLayer.CancelOrder(id, userId);
         }
+
+        [HttpPost("{id:int}/return")]
+        public async Task<IActionResult> RequestReturn(int id, [FromBody] ReturnOrderRequest request)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.RequestReturn(id, userId, request.Reason);
+        }
+
+        [HttpPut("{id:int}/process-refund")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> ProcessRefund(int id, [FromBody] ProcessRefundRequest request)
+        {
+            return await _businessLayer.ProcessRefund(id, request.Action);
+        }
     }
 
     public class UpdateOrderStatusRequest
@@ -158,5 +172,15 @@ namespace Ecommerce_Backend.Controllers
     public class UpdatePaymentStatusRequest
     {
         public string PaymentStatus { get; set; } = string.Empty;
+    }
+
+    public class ReturnOrderRequest
+    {
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class ProcessRefundRequest
+    {
+        public string Action { get; set; } = string.Empty; // "APPROVE" or "REJECT"
     }
 }

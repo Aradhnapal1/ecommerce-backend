@@ -10,6 +10,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
         Task<IActionResult> UpdatePaymentStatus(int orderId, string paymentStatus);
         Task<IActionResult> CancelOrder(int orderId, int userId);
+        Task<IActionResult> RequestReturn(int orderId, int userId, string reason);
+        Task<IActionResult> ProcessRefund(int orderId, string action);
         Task<List<OrderItemModel>?> GetOrderItems(int orderId, int userId, bool isAdmin);
     }
 
@@ -124,6 +126,38 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             }
 
             return await _databaseLayer.CancelOrder(orderId, userId);
+        }
+
+        public async Task<IActionResult> RequestReturn(int orderId, int userId, string reason)
+        {
+            if (orderId <= 0)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Invalid order ID" });
+            }
+            if (userId <= 0)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Invalid user ID" });
+            }
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Return reason is required" });
+            }
+
+            return await _databaseLayer.RequestReturn(orderId, userId, reason);
+        }
+
+        public async Task<IActionResult> ProcessRefund(int orderId, string action)
+        {
+            if (orderId <= 0)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Invalid order ID" });
+            }
+            if (string.IsNullOrWhiteSpace(action))
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Action is required" });
+            }
+
+            return await _databaseLayer.ProcessRefund(orderId, action);
         }
 
         public async Task<List<OrderItemModel>?> GetOrderItems(int orderId, int userId, bool isAdmin)

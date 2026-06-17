@@ -13,6 +13,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
         Task<IActionResult> UpdatePaymentStatus(int orderId, string status);
         Task<IActionResult> CancelOrder(int orderId, int userId);
+        Task<IActionResult> RequestReturn(int orderId, int userId, string reason);
+        Task<IActionResult> ProcessRefund(int orderId, string action);
         Task<List<OrderItemModel>> GetOrderItems(int orderId);
     }
 
@@ -410,7 +412,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         }
                     });
                 }
-                catch (Exception ex)
+                catch (Exception )
                 {
                     await transaction.RollbackAsync();
                     throw;
@@ -677,6 +679,95 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 }
 
                 return new OkObjectResult(new { success = true, message = "Order cancelled successfully" });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+            }
+        }
+
+        public async Task<IActionResult> RequestReturn(int orderId, int userId, string reason)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var checkQuery = "SELECT order_status FROM orders WHERE id = @OrderId AND userid = @UserId LIMIT 1";
+                using var checkCmd = new NpgsqlCommand(checkQuery, con);
+                checkCmd.Parameters.AddWithValue("@OrderId", orderId);
+                checkCmd.Parameters.AddWithValue("@UserId", userId);
+
+                var status = (string?)await checkCmd.ExecuteScalarAsync();
+
+                if (status == null)
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Order not found or access denied" });
+                }
+
+                if (!status.Equals("DELIVERED", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Only delivered orders can be returned" });
+                }
+
+                var updateQuery = "UPDATE orders SET order_status = 'RETURN_REQUESTED', return_reason = @Reason, updatedat = NOW() WHERE id = @OrderId AND userid = @UserId";
+                using var updateCmd = new NpgsqlCommand(updateQuery, con);
+                updateCmd.Parameters.AddWithValue("@Reason", reason);
+                updateCmd.Parameters.AddWithValue("@OrderId", orderId);
+                updateCmd.Parameters.AddWithValue("@UserId", userId);
+
+                await updateCmd.ExecuteNonQueryAsync();
+
+                return new OkObjectResult(new { success = true, message = "Return request submitted successfully" });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+            }
+        }
+
+        public async Task<IActionResult> ProcessRefund(int orderId, string action)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var checkQuery = "SELECT order_status FROM orders WHERE id = @OrderId LIMIT 1";
+                using var checkCmd = new NpgsqlCommand(checkQuery, con);
+                checkCmd.Parameters.AddWithValue("@OrderId", orderId);
+
+                var status = (string?)await checkCmd.ExecuteScalarAsync();
+
+                if (status == null)
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Order not found" });
+                }
+
+                if (!status.Equals("RETURN_REQUESTED", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Order is not in RETURN_REQUESTED state" });
+                }
+
+                string newOrderStatus = action.Equals("APPROVE", StringComparison.OrdinalIgnoreCase) ? "RETURNED" : "RETURN_REJECTED";
+                string newPaymentStatus = action.Equals("APPROVE", StringComparison.OrdinalIgnoreCase) ? "REFUNDED" : null;
+                string message = action.Equals("APPROVE", StringComparison.OrdinalIgnoreCase) ? "Return approved and refund initiated." : "Return request rejected.";
+
+                var updateQuery = "UPDATE orders SET order_status = @OrderStatus " +
+                                  (newPaymentStatus != null ? ", payment_status = @PaymentStatus " : "") +
+                                  ", updatedat = NOW() WHERE id = @OrderId";
+
+                using var updateCmd = new NpgsqlCommand(updateQuery, con);
+                updateCmd.Parameters.AddWithValue("@OrderStatus", newOrderStatus);
+                if (newPaymentStatus != null)
+                {
+                    updateCmd.Parameters.AddWithValue("@PaymentStatus", newPaymentStatus);
+                }
+                updateCmd.Parameters.AddWithValue("@OrderId", orderId);
+
+                await updateCmd.ExecuteNonQueryAsync();
+
+                return new OkObjectResult(new { success = true, message = message });
             }
             catch (Exception ex)
             {
