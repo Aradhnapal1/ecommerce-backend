@@ -87,7 +87,17 @@ namespace Ecommerce_Backend.Controllers
             {
                 message = "Users fetched successfully",
                 total = users.Count,
-                users = users.Select(u => new { u.id, u.first_name, u.last_name, u.email, u.phone_number, u.role }).ToList()
+                users = users.Select(u => new { 
+                    u.id, 
+                    u.first_name, 
+                    u.last_name, 
+                    u.email, 
+                    u.phone_number, 
+                    u.role,
+                    profileImageUrl = u.ProfileImageUrl,
+                    dateOfBirth = u.DateOfBirth,
+                    gender = u.Gender
+                }).ToList()
             });
         }
 

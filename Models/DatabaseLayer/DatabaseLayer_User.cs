@@ -194,7 +194,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             await con.OpenAsync();
 
             using var cmd = new NpgsqlCommand(@"
-        SELECT id, first_name, last_name, email, phone_number, role, is_verified
+        SELECT id, first_name, last_name, email, phone_number, role, is_verified,
+               profile_image_url, date_of_birth, gender
         FROM user_register
         WHERE is_verified = TRUE
         ORDER BY id DESC
@@ -212,7 +213,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     last_name = reader.GetString(reader.GetOrdinal("last_name")),
                     email = reader.GetString(reader.GetOrdinal("email")),
                     phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
-                    role = reader.GetString(reader.GetOrdinal("role"))
+                    role = reader.GetString(reader.GetOrdinal("role")),
+                    ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("profile_image_url")) ? null : reader.GetString(reader.GetOrdinal("profile_image_url")),
+                    DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
+                    Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"))
                 });
             }
 

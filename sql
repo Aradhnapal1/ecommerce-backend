@@ -5,7 +5,7 @@ CREATE TABLE user_register
     last_name    VARCHAR(100) NOT NULL,
     email        VARCHAR(150) UNIQUE NOT NULL,
     phone_number VARCHAR(15)  NOT NULL,
-    password     TEXT         NOT NULL,
+    pass    ord     TEXT         NOT NULL,
     role         VARCHAR(50)  NOT NULL,
     otp          VARCHAR(10),
     is_verified  BOOLEAN      DEFAULT FALSE,
@@ -264,6 +264,131 @@ CREATE TABLE user_addresses
     REFERENCES user_register(id)
     ON DELETE CASCADE
 );
+
+CREATE TABLE wishlist (
+    id SERIAL PRIMARY KEY,
+
+    userid INT NULL,
+
+    productid INT NOT NULL,
+
+    variantid INT NULL,
+
+    ipaddress VARCHAR(100),
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_wishlist_user
+        FOREIGN KEY (userid)
+        REFERENCES user_register(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_wishlist_product
+        FOREIGN KEY (productid)
+        REFERENCES products(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_wishlist_variant
+        FOREIGN KEY (variantid)
+        REFERENCES product_variants(id)
+        ON DELETE CASCADE
+);
+
+
+
+
+CREATE TABLE addcart (
+	    id SERIAL PRIMARY KEY,
+	
+	    userid INT NULL,
+	
+	    productid INT NOT NULL,
+	
+	    variantid INT NULL,
+	
+	    quantity INT NOT NULL DEFAULT 1,
+	
+	    ipaddress VARCHAR(100),
+	
+	    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	
+	    updatedat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	
+	    CONSTRAINT fk_addcart_user
+	        FOREIGN KEY (userid)
+	        REFERENCES user_register(id)
+	        ON DELETE CASCADE,
+	
+	    CONSTRAINT fk_addcart_product
+	        FOREIGN KEY (productid)
+	        REFERENCES products(id)
+	        ON DELETE CASCADE,
+	
+	    CONSTRAINT fk_addcart_variant
+	        FOREIGN KEY (variantid)
+	        REFERENCES product_variants(id)
+	        ON DELETE CASCADE
+	);
+	
+    CREATE TABLE orders
+(
+    id SERIAL PRIMARY KEY,
+
+    order_number VARCHAR(50) UNIQUE NOT NULL,
+
+    userid INT NOT NULL,
+
+    addressid INT NOT NULL,
+
+    full_name VARCHAR(200) NOT NULL,
+
+    mobile VARCHAR(20) NOT NULL,
+
+    address_line1 TEXT NOT NULL,
+
+    address_line2 TEXT,
+
+    landmark VARCHAR(255),
+
+    city VARCHAR(100),
+
+    state VARCHAR(100),
+
+    country VARCHAR(100),
+
+    pincode VARCHAR(20),
+
+    payment_method VARCHAR(50) NOT NULL,
+
+    payment_status VARCHAR(50) DEFAULT 'PENDING',
+
+    order_status VARCHAR(50) DEFAULT 'PLACED',
+
+    subtotal NUMERIC(10,2) NOT NULL,
+
+    discount_amount NUMERIC(10,2) DEFAULT 0,
+
+    couponid INT,
+
+    coupon_code VARCHAR(50),
+
+    shipping_charge NUMERIC(10,2) DEFAULT 0,
+
+    tax_amount NUMERIC(10,2) DEFAULT 0,
+
+    final_amount NUMERIC(10,2) NOT NULL,
+
+    razorpay_order_id VARCHAR(255),
+
+    razorpay_payment_id VARCHAR(255),
+
+    razorpay_signature TEXT,
+
+    createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updatedat TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE order_items
 (
     id SERIAL PRIMARY KEY,
@@ -300,6 +425,20 @@ CREATE TABLE order_items
     ON DELETE CASCADE
 );
 
+ALTER TABLE orders
+ADD COLUMN notes TEXT;
 
+ALTER TABLE orders
+ADD COLUMN delivery_charge NUMERIC(10,2) DEFAULT 0;
 
+ALTER TABLE orders
+ADD COLUMN estimated_delivery_date TIMESTAMP;
 
+ALTER TABLE orders
+ADD COLUMN cancelled_at TIMESTAMP;
+
+ALTER TABLE orders
+ADD COLUMN delivered_at TIMESTAMP;
+
+	ALTER TABLE orders
+	ADD COLUMN notes TEXT;
