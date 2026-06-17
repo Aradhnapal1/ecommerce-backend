@@ -116,5 +116,43 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.DeleteUser(id);
         }
+
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest model)
+        {
+            return await _businessLayer.ForgotPassword(model);
+        }
+
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest model)
+        {
+            return await _businessLayer.ResetPassword(model);
+        }
+
+        [HttpPost("change-password")]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest model)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.ChangePassword(userId, model);
+        }
+
+        [HttpGet("profile")]
+        [Authorize]
+        public async Task<IActionResult> GetProfile()
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await GetUserById(userId);
+        }
+
+        [HttpPut("update-profile")]
+        [Authorize]
+        public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileRequest model)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.UpdateProfile(userId, model);
+        }
     }
 }

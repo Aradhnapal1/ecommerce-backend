@@ -12,6 +12,7 @@ namespace Ecommerce_Backend.Services
 
         Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod);
         Task SendOrderCancellationEmail(string toEmail, string orderNumber);
+        Task SendPasswordResetEmail(string toEmail, string resetLink);
 
     }
 
@@ -163,6 +164,39 @@ namespace Ecommerce_Backend.Services
                 IsBodyHtml = true
             };
 
+            mail.To.Add(toEmail);
+            await client.SendMailAsync(mail);
+            client.Dispose();
+        }
+
+        public async Task SendPasswordResetEmail(string toEmail, string resetLink)
+        {
+            var smtp = _configuration.GetSection("Smtp");
+            var client = new SmtpClient(smtp["Host"])
+            {
+                Port = int.Parse(smtp["Port"]!),
+                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                UseDefaultCredentials = false
+            };
+
+            var mail = new MailMessage
+            {
+                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
+                Subject = "Reset Your Password",
+                Body = $@"
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
+                        <h2 style='color: #4A90E2;'>Password Reset Request</h2>
+                        <p>Hi,</p>
+                        <p>We received a request to reset your password. You can reset your password by clicking the link below:</p>
+                        <p style='text-align: center;'>
+                            <a href='{resetLink}' style='background-color: #4A90E2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Reset Password</a>
+                        </p>
+                        <p>If you did not request a password reset, please ignore this email. This link is valid for 1 hour.</p>
+                    </div>",
+                IsBodyHtml = true
+            };
             mail.To.Add(toEmail);
             await client.SendMailAsync(mail);
             client.Dispose();

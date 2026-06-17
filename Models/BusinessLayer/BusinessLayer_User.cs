@@ -12,6 +12,10 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<UserLoginResponse?> GetUserById(int id);
         Task<List<UserLoginResponse>> GetAllUsers();
         Task<IActionResult> DeleteUser(int id);
+        Task<IActionResult> ForgotPassword(ForgotPasswordRequest model);
+        Task<IActionResult> ResetPassword(ResetPasswordRequest model);
+        Task<IActionResult> ChangePassword(int userId, ChangePasswordRequest model);
+        Task<IActionResult> UpdateProfile(int userId, UpdateProfileRequest model);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -45,6 +49,52 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<IActionResult> DeleteUser(int id)
         {
             return await _databaseLayer.DeleteUser(id);
+        }
+
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest model)
+        {
+            if (string.IsNullOrWhiteSpace(model.Email))
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Email is required." });
+            }
+            return await _databaseLayer.ForgotPassword(model.Email);
+        }
+
+        public async Task<IActionResult> ResetPassword(ResetPasswordRequest model)
+        {
+            if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.NewPassword))
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Email, Token and new password are required." });
+            }
+            if (model.NewPassword.Length < 6)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Password must be at least 6 characters long." });
+            }
+            return await _databaseLayer.ResetPassword(model);
+        }
+
+        public async Task<IActionResult> ChangePassword(int userId, ChangePasswordRequest model)
+        {
+            if (string.IsNullOrWhiteSpace(model.OldPassword) || string.IsNullOrWhiteSpace(model.NewPassword))
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Old password and new password are required." });
+            }
+            if (model.NewPassword.Length < 6)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "New password must be at least 6 characters long." });
+            }
+
+            return await _databaseLayer.ChangePassword(userId, model);
+        }
+
+        public async Task<IActionResult> UpdateProfile(int userId, UpdateProfileRequest model)
+        {
+            if (userId <= 0)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Invalid user ID." });
+            }
+
+            return await _databaseLayer.UpdateProfile(userId, model);
         }
     }
 }

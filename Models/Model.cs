@@ -34,6 +34,9 @@ namespace Ecommerce_Backend.Models
         public string? phone_number { get; set; }
         public string? role { get; set; }
         public string? token { get; set; }
+        public string? ProfileImageUrl { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
     }
 
 
@@ -459,6 +462,35 @@ namespace Ecommerce_Backend.Models
     {
         public string CouponCode { get; set; }
     }
+
+    public class ForgotPasswordRequest
+    {
+        public string Email { get; set; }
+    }
+
+    public class ResetPasswordRequest
+    {
+        public string Email { get; set; }
+        public string Token { get; set; }
+        public string NewPassword { get; set; }
+    }
+
+    public class ChangePasswordRequest
+    {
+        public string OldPassword { get; set; } = string.Empty;
+        public string NewPassword { get; set; } = string.Empty;
+    }
+
+    public class UpdateProfileRequest
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public IFormFile? ProfileImage { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+    }
+
     public class UserAddressModel
     {
         public int Id { get; set; }
