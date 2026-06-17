@@ -8,6 +8,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin);
         Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin);
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
+        Task<IActionResult> UpdatePaymentStatus(int orderId, string paymentStatus);
+        Task<IActionResult> CancelOrder(int orderId, int userId);
         Task<List<OrderItemModel>?> GetOrderItems(int orderId, int userId, bool isAdmin);
     }
 
@@ -76,6 +78,52 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             }
 
             return await _databaseLayer.UpdateOrderStatus(orderId, status);
+        }
+
+        public async Task<IActionResult> UpdatePaymentStatus(int orderId, string paymentStatus)
+        {
+            if (orderId <= 0)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Invalid order ID"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(paymentStatus))
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Payment status is required"
+                });
+            }
+
+            return await _databaseLayer.UpdatePaymentStatus(orderId, paymentStatus);
+        }
+
+        public async Task<IActionResult> CancelOrder(int orderId, int userId)
+        {
+            if (orderId <= 0)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Invalid order ID"
+                });
+            }
+
+            if (userId <= 0)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Invalid user ID"
+                });
+            }
+
+            return await _databaseLayer.CancelOrder(orderId, userId);
         }
 
         public async Task<List<OrderItemModel>?> GetOrderItems(int orderId, int userId, bool isAdmin)

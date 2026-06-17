@@ -11,6 +11,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin);
         Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin);
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
+        Task<IActionResult> UpdatePaymentStatus(int orderId, string status);
+        Task<IActionResult> CancelOrder(int orderId, int userId);
         Task<List<OrderItemModel>> GetOrderItems(int orderId);
     }
 
@@ -228,6 +230,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     // Step 4: Calculate Final Amount
                     decimal finalAmount = subtotal - discountAmount;
 
+                    string paymentStatus = model.PaymentMethod.Equals("COD", StringComparison.OrdinalIgnoreCase) ? "PENDING" : "SUCCESS";
+
                     // Step 5: Create Order
                     string orderNumber = "ORD" + DateTime.Now.Ticks;
                     int orderId = 0;
@@ -242,7 +246,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         VALUES 
                         (@OrderNumber, @UserId, @AddressId, @FullName, @Mobile, @AddressLine1,
                          @AddressLine2, @Landmark, @City, @State, @Country, @Pincode,
-                         @PaymentMethod, 'PENDING', 'PLACED', @Subtotal,
+                         @PaymentMethod, @PaymentStatus, 'PLACED', @Subtotal,
                          @DiscountAmount, @CouponId, @CouponCode, @FinalAmount, 
                          NOW(), NOW())
                         RETURNING id";
@@ -262,6 +266,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         createOrderCmd.Parameters.AddWithValue("@Country", address.Country ?? (object)DBNull.Value);
                         createOrderCmd.Parameters.AddWithValue("@Pincode", address.Pincode ?? (object)DBNull.Value);
                         createOrderCmd.Parameters.AddWithValue("@PaymentMethod", model.PaymentMethod);
+                        createOrderCmd.Parameters.AddWithValue("@PaymentStatus", paymentStatus);
                         createOrderCmd.Parameters.AddWithValue("@Subtotal", subtotal);
                         createOrderCmd.Parameters.AddWithValue("@DiscountAmount", discountAmount);
                         createOrderCmd.Parameters.AddWithValue("@CouponId", couponId ?? (object)DBNull.Value);
@@ -561,6 +566,121 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     StatusCode = 500
                 };
+            }
+        }
+
+        public async Task<IActionResult> UpdatePaymentStatus(int orderId, string status)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var query = @"
+                    UPDATE orders 
+                    SET payment_status = @Status, updatedat = NOW()
+                    WHERE id = @OrderId";
+
+                using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@Status", status);
+                cmd.Parameters.AddWithValue("@OrderId", orderId);
+
+                int rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                if (rowsAffected > 0)
+                {
+                    return new OkObjectResult(new
+                    {
+                        success = true,
+                        message = "Payment status updated successfully"
+                    });
+                }
+
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Order not found"
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = ex.Message
+                })
+                {
+                    StatusCode = 500
+                };
+            }
+        }
+
+        public async Task<IActionResult> CancelOrder(int orderId, int userId)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                var checkQuery = @"
+                    SELECT o.order_status, o.order_number, u.email 
+                    FROM orders o
+                    JOIN user_register u ON o.userid = u.id
+                    WHERE o.id = @OrderId AND o.userid = @UserId LIMIT 1";
+
+                using var checkCmd = new NpgsqlCommand(checkQuery, con);
+                checkCmd.Parameters.AddWithValue("@OrderId", orderId);
+                checkCmd.Parameters.AddWithValue("@UserId", userId);
+
+                string? status = null;
+                string? orderNumber = null;
+                string? userEmail = null;
+                using (var reader = await checkCmd.ExecuteReaderAsync())
+                {
+                    if (await reader.ReadAsync()) {
+                        status = reader["order_status"]?.ToString();
+                        orderNumber = reader["order_number"]?.ToString();
+                        userEmail = reader["email"]?.ToString();
+                    }
+                }
+
+                if (status == null)
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Order not found or access denied" });
+                }
+
+                if (status.Equals("SHIPPED", StringComparison.OrdinalIgnoreCase) || 
+                    status.Equals("DELIVERED", StringComparison.OrdinalIgnoreCase) || 
+                    status.Equals("CANCELLED", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Order cannot be cancelled at this stage" });
+                }
+
+                var updateQuery = "UPDATE orders SET order_status = 'CANCELLED', updatedat = NOW() WHERE id = @OrderId AND userid = @UserId";
+                using var updateCmd = new NpgsqlCommand(updateQuery, con);
+                updateCmd.Parameters.AddWithValue("@OrderId", orderId);
+                updateCmd.Parameters.AddWithValue("@UserId", userId);
+
+                await updateCmd.ExecuteNonQueryAsync();
+
+                // Send cancellation email to user
+                try
+                {
+                    if (!string.IsNullOrEmpty(userEmail) && !string.IsNullOrEmpty(orderNumber))
+                    {
+                        await _emailService.SendOrderCancellationEmail(userEmail, orderNumber);
+                    }
+                }
+                catch
+                {
+                    // Ignore email sending error to avoid API failure if email service is down
+                }
+
+                return new OkObjectResult(new { success = true, message = "Order cancelled successfully" });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
             }
         }
 

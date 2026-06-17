@@ -1,4 +1,4 @@
-﻿﻿using Ecommerce_Backend.Models;
+﻿﻿﻿﻿using Ecommerce_Backend.Models;
 using System.Net;
 using System.Net.Mail;
 
@@ -11,6 +11,7 @@ namespace Ecommerce_Backend.Services
         Task SendContactNotification(ContactModel contact);
 
         Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod);
+        Task SendOrderCancellationEmail(string toEmail, string orderNumber);
 
     }
 
@@ -125,6 +126,38 @@ namespace Ecommerce_Backend.Services
                         <p><strong>Payment Method:</strong> {paymentMethod}</p>
                         <br/>
                         <p style='color: #555;'>We will notify you once your order is shipped. Thank you for shopping with us!</p>
+                    </div>
+                ",
+                IsBodyHtml = true
+            };
+
+            mail.To.Add(toEmail);
+            await client.SendMailAsync(mail);
+            client.Dispose();
+        }
+
+        public async Task SendOrderCancellationEmail(string toEmail, string orderNumber)
+        {
+            var smtp = _configuration.GetSection("Smtp");
+            var client = new SmtpClient(smtp["Host"])
+            {
+                Port = int.Parse(smtp["Port"]!),
+                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                UseDefaultCredentials = false
+            };
+
+            var mail = new MailMessage
+            {
+                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
+                Subject = $"Order Cancelled - {orderNumber}",
+                Body = $@"
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
+                        <h2 style='color: #D0021B;'>Order Cancelled</h2>
+                        <p>Hi,</p>
+                        <p>Your order <strong>{orderNumber}</strong> has been successfully cancelled as per your request.</p>
+                        <p style='color: #555;'>If you have already paid for this order, the refund process will be initiated shortly.</p>
                     </div>
                 ",
                 IsBodyHtml = true

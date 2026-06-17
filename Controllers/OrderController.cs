@@ -134,10 +134,29 @@ namespace Ecommerce_Backend.Controllers
         {
             return await _businessLayer.UpdateOrderStatus(id, request.Status);
         }
+
+        [HttpPut("{id:int}/payment-status")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> UpdatePaymentStatus(int id, [FromBody] UpdatePaymentStatusRequest request)
+        {
+            return await _businessLayer.UpdatePaymentStatus(id, request.PaymentStatus);
+        }
+
+        [HttpPut("{id:int}/cancel")]
+        public async Task<IActionResult> CancelOrder(int id)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.CancelOrder(id, userId);
+        }
     }
 
     public class UpdateOrderStatusRequest
     {
         public string Status { get; set; } = string.Empty;
+    }
+
+    public class UpdatePaymentStatusRequest
+    {
+        public string PaymentStatus { get; set; } = string.Empty;
     }
 }
