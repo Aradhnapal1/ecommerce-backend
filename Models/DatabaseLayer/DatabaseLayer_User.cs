@@ -149,7 +149,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
                 role = reader.GetString(reader.GetOrdinal("role")),
                 ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("profile_image_url")) ? null : reader.GetString(reader.GetOrdinal("profile_image_url")),
-                DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
+                DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
                 Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"))
             };
         }
@@ -183,7 +183,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
                 role = reader.GetString(reader.GetOrdinal("role")),
                 ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("profile_image_url")) ? null : reader.GetString(reader.GetOrdinal("profile_image_url")),
-                DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
+                DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
                 Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"))
             };
         }
@@ -216,7 +216,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     phone_number = reader.GetString(reader.GetOrdinal("phone_number")),
                     role = reader.GetString(reader.GetOrdinal("role")),
                     ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("profile_image_url")) ? null : reader.GetString(reader.GetOrdinal("profile_image_url")),
-                    DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
+                    DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
                     Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"))
                 });
             }
@@ -497,7 +497,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             phoneNumber = reader.GetString(reader.GetOrdinal("phone_number")),
                             role = reader.GetString(reader.GetOrdinal("role")),
                             profileImageUrl = reader.IsDBNull(reader.GetOrdinal("profile_image_url")) ? null : reader.GetString(reader.GetOrdinal("profile_image_url")),
-                            dateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
+                            dateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("date_of_birth")),
                             gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"))
                         }
                     });
