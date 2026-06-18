@@ -145,16 +145,31 @@ EXISTS (
                 parameters.Add(new NpgsqlParameter("sizeIds", filter.ResolvedSizeIds));
             }
 
-            if (filter.MinPrice.HasValue && filter.MinPrice.Value > 0)
-            {
-                whereClauses.Add("p.saleprice >= @minPrice");
-                parameters.Add(new NpgsqlParameter("minPrice", filter.MinPrice.Value));
-            }
+            bool hasMinPrice = filter.MinPrice.HasValue && filter.MinPrice.Value > 0;
+            bool hasMaxPrice = filter.MaxPrice.HasValue && filter.MaxPrice.Value > 0;
 
-            if (filter.MaxPrice.HasValue && filter.MaxPrice.Value > 0)
+            if (hasMinPrice || hasMaxPrice)
             {
-                whereClauses.Add("p.saleprice <= @maxPrice");
-                parameters.Add(new NpgsqlParameter("maxPrice", filter.MaxPrice.Value));
+                var pConds = new List<string>();
+                var vConds = new List<string>();
+
+                if (hasMinPrice)
+                {
+                    pConds.Add("p.saleprice >= @minPrice");
+                    vConds.Add("pv.saleprice >= @minPrice");
+                    parameters.Add(new NpgsqlParameter("minPrice", filter.MinPrice.Value));
+                }
+                if (hasMaxPrice)
+                {
+                    pConds.Add("p.saleprice <= @maxPrice");
+                    vConds.Add("pv.saleprice <= @maxPrice");
+                    parameters.Add(new NpgsqlParameter("maxPrice", filter.MaxPrice.Value));
+                }
+
+                whereClauses.Add($@"({string.Join(" AND ", pConds)} OR EXISTS (
+    SELECT 1 FROM product_variants pv 
+    WHERE pv.productid = p.id AND {string.Join(" AND ", vConds)}
+))");
             }
 
             if (filter.ResolvedDiscountPercents.Length > 0)

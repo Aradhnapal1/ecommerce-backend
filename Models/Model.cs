@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.AspNetCore.Http;
+﻿﻿﻿﻿using Microsoft.AspNetCore.Http;
 namespace Ecommerce_Backend.Models
 
 {
@@ -582,5 +582,26 @@ namespace Ecommerce_Backend.Models
         public string? SKU { get; set; }
         public string? ColorName { get; set; }
         public string? SizeName { get; set; }
+    }
+
+    public class ProductReviewModel
+    {
+        public int Id { get; set; }
+        public int ProductId { get; set; }
+        public int UserId { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? ProfileImageUrl { get; set; }
+        public int Rating { get; set; }
+        public string? Comment { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class AddReviewRequest
+    {
+        public int ProductId { get; set; }
+        public int Rating { get; set; }
+        public string? Comment { get; set; }
     }
 }
