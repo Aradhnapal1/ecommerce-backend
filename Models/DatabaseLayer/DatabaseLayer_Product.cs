@@ -1,4 +1,4 @@
-﻿using CloudinaryDotNet;
+﻿﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
@@ -79,18 +79,34 @@ ORDER BY p.id DESC;
 
             if (filter.ResolvedCategorySlugs.Length > 0)
             {
-                whereClauses.Add("c.slug = ANY(@categorySlugs)");
+                whereClauses.Add(@"p.categoryid IN (
+    WITH RECURSIVE category_tree AS (
+        SELECT id FROM categories WHERE LOWER(slug) = ANY(@categorySlugs)
+        UNION ALL
+        SELECT c.id FROM categories c
+        INNER JOIN category_tree ct ON c.parent_id = ct.id
+    )
+    SELECT id FROM category_tree
+)");
                 parameters.Add(new NpgsqlParameter("categorySlugs", filter.ResolvedCategorySlugs));
             }
             else if (filter.ResolvedCategoryIds.Length > 0)
             {
-                whereClauses.Add("p.categoryid = ANY(@categoryIds)");
+                whereClauses.Add(@"p.categoryid IN (
+    WITH RECURSIVE category_tree AS (
+        SELECT id FROM categories WHERE id = ANY(@categoryIds)
+        UNION ALL
+        SELECT c.id FROM categories c
+        INNER JOIN category_tree ct ON c.parent_id = ct.id
+    )
+    SELECT id FROM category_tree
+)");
                 parameters.Add(new NpgsqlParameter("categoryIds", filter.ResolvedCategoryIds));
             }
 
             if (filter.ResolvedBrandSlugs.Length > 0)
             {
-                whereClauses.Add("b.slug = ANY(@brandSlugs)");
+                whereClauses.Add("LOWER(b.slug) = ANY(@brandSlugs)");
                 parameters.Add(new NpgsqlParameter("brandSlugs", filter.ResolvedBrandSlugs));
             }
             else if (filter.ResolvedBrandIds.Length > 0)
@@ -101,7 +117,7 @@ ORDER BY p.id DESC;
 
             if (filter.ResolvedColorSlugs.Length > 0)
             {
-                whereClauses.Add("col.slug = ANY(@colorSlugs)");
+                whereClauses.Add("LOWER(col.slug) = ANY(@colorSlugs)");
                 parameters.Add(new NpgsqlParameter("colorSlugs", filter.ResolvedColorSlugs));
             }
             else if (filter.ResolvedColorIds.Length > 0)
@@ -119,7 +135,7 @@ EXISTS (
     SELECT 1
     FROM sizes sz
     WHERE sz.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
-      AND sz.slug = ANY(@sizeSlugs)
+      AND LOWER(sz.slug) = ANY(@sizeSlugs)
 )");
                 parameters.Add(new NpgsqlParameter("sizeSlugs", filter.ResolvedSizeSlugs));
             }
@@ -129,13 +145,13 @@ EXISTS (
                 parameters.Add(new NpgsqlParameter("sizeIds", filter.ResolvedSizeIds));
             }
 
-            if (filter.MinPrice.HasValue)
+            if (filter.MinPrice.HasValue && filter.MinPrice.Value > 0)
             {
                 whereClauses.Add("p.saleprice >= @minPrice");
                 parameters.Add(new NpgsqlParameter("minPrice", filter.MinPrice.Value));
             }
 
-            if (filter.MaxPrice.HasValue)
+            if (filter.MaxPrice.HasValue && filter.MaxPrice.Value > 0)
             {
                 whereClauses.Add("p.saleprice <= @maxPrice");
                 parameters.Add(new NpgsqlParameter("maxPrice", filter.MaxPrice.Value));

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿﻿using Microsoft.AspNetCore.Http;
 namespace Ecommerce_Backend.Models
 
 {
@@ -294,13 +294,16 @@ namespace Ecommerce_Backend.Models
         {
             if (slugs is { Length: > 0 })
                 return slugs
+                    .SelectMany(s => s.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
                     .Where(s => !string.IsNullOrWhiteSpace(s))
                     .Select(s => s.Trim().ToLowerInvariant())
                     .Distinct()
                     .ToArray();
 
             return !string.IsNullOrWhiteSpace(singleSlug)
-                ? new[] { singleSlug.Trim().ToLowerInvariant() }
+                ? singleSlug.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim().ToLowerInvariant())
+                    .ToArray()
                 : Array.Empty<string>();
         }
 
@@ -313,8 +316,8 @@ namespace Ecommerce_Backend.Models
             ResolvedBrandSlugs.Length > 0 ||
             ResolvedColorSlugs.Length > 0 ||
             ResolvedSizeSlugs.Length > 0 ||
-            MinPrice.HasValue ||
-            MaxPrice.HasValue ||
+            (MinPrice.HasValue && MinPrice.Value > 0) ||
+            (MaxPrice.HasValue && MaxPrice.Value > 0) ||
             ResolvedDiscountPercents.Length > 0 ||
             HasDiscount.HasValue ||
             InStock.HasValue ||
