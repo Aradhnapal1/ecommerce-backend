@@ -17,9 +17,14 @@ using System.Threading.RateLimiting;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration
-    .GetConnectionString("AppDbContextConnection")
-    ?? throw new InvalidOperationException(
-        "Connection string 'AppDbContextConnection' not found.");
+    .GetConnectionString("AppDbContextConnection");
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Connection string 'AppDbContextConnection' is not configured. " +
+        "Set ConnectionStrings__AppDbContextConnection in .env.deploy on the server.");
+}
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
@@ -125,16 +130,18 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IDatabaseLayer, DataBaseLayer>();
 builder.Services.AddScoped<IBusinessLayer, BusinessLayer>();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
-await DatabaseSchemaBootstrapper.EnsureSecurityColumnsAsync(
+await DatabaseSchemaBootstrapper.EnsureSchemaAsync(
     connectionString,
     app.Logger);
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
+    app.UseExceptionHandler();
     app.UseHsts();
 }
 
