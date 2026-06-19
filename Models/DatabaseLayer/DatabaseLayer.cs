@@ -8,13 +8,15 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         private readonly IConfiguration _configuration;
         private readonly string DbConnection;
+        private readonly IRazorpayService _razorpayService;
 
-        public DataBaseLayer(IConfiguration configuration, IEmailService emailService)
+        public DataBaseLayer(IConfiguration configuration, IEmailService emailService, IRazorpayService razorpayService)
         {
             this._configuration = configuration;
             this.DbConnection = this._configuration
                 .GetConnectionString("AppDbContextConnection")!;
-            this._emailService = emailService;   // ✅
+            this._emailService = emailService;
+            this._razorpayService = razorpayService;
         }
     }
 }

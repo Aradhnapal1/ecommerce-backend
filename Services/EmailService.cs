@@ -11,6 +11,7 @@ namespace Ecommerce_Backend.Services
         Task SendContactNotification(ContactModel contact);
 
         Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod);
+        Task SendOrderInvoiceEmail(string toEmail, OrderInvoiceEmailModel invoice);
         Task SendOrderCancellationEmail(string toEmail, string orderNumber);
         Task SendPasswordResetEmail(string toEmail, string resetLink);
     }
@@ -63,18 +64,56 @@ namespace Ecommerce_Backend.Services
         }
 
         public Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod) =>
-            SendAsync(toEmail, $"Order Confirmation - {orderNumber}", $@"
-                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
-                        <h2 style='color: #4A90E2;'>Thank you for your order!</h2>
-                        <p>Your order has been placed successfully.</p>
-                        <h3 style='border-bottom: 1px solid #eee; padding-bottom: 10px;'>Order Summary:</h3>
-                        <p><strong>Order Number:</strong> {orderNumber}</p>
-                        <p><strong>Total Amount:</strong> ₹{finalAmount}</p>
-                        <p><strong>Payment Method:</strong> {paymentMethod}</p>
-                        <br/>
-                        <p style='color: #555;'>We will notify you once your order is shipped. Thank you for shopping with us!</p>
-                    </div>
-                ");
+            SendOrderInvoiceEmail(toEmail, new OrderInvoiceEmailModel
+            {
+                OrderNumber = orderNumber,
+                FinalAmount = finalAmount,
+                PaymentMethod = paymentMethod,
+                PaymentStatus = "CONFIRMED",
+                Subtotal = finalAmount,
+                Items = new List<OrderItemModel>()
+            });
+
+        public Task SendOrderInvoiceEmail(string toEmail, OrderInvoiceEmailModel invoice)
+        {
+            var rows = string.Join("", invoice.Items.Select(item => $@"
+                <tr>
+                    <td style='padding:8px;border-bottom:1px solid #eee'>{item.ProductName}</td>
+                    <td style='padding:8px;border-bottom:1px solid #eee'>{item.ColorName ?? "-"}</td>
+                    <td style='padding:8px;border-bottom:1px solid #eee'>{item.SizeName ?? "-"}</td>
+                    <td style='padding:8px;border-bottom:1px solid #eee;text-align:center'>{item.Quantity}</td>
+                    <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>₹{item.Price}</td>
+                    <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>₹{item.Total}</td>
+                </tr>"));
+
+            var body = $@"
+                <div style='font-family:Arial,sans-serif;max-width:700px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px'>
+                    <h2 style='color:#4A90E2'>Order Invoice</h2>
+                    <p>Hi {invoice.CustomerName},</p>
+                    <p>Thank you for your order. Your invoice details are below.</p>
+                    <p><strong>Order Number:</strong> {invoice.OrderNumber}</p>
+                    <p><strong>Payment Method:</strong> {invoice.PaymentMethod}</p>
+                    <p><strong>Payment Status:</strong> {invoice.PaymentStatus}</p>
+                    <table style='width:100%;border-collapse:collapse;margin-top:16px'>
+                        <thead>
+                            <tr style='background:#f5f5f5'>
+                                <th style='padding:8px;text-align:left'>Product</th>
+                                <th style='padding:8px;text-align:left'>Color</th>
+                                <th style='padding:8px;text-align:left'>Size</th>
+                                <th style='padding:8px;text-align:center'>Qty</th>
+                                <th style='padding:8px;text-align:right'>Price</th>
+                                <th style='padding:8px;text-align:right'>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows}</tbody>
+                    </table>
+                    <p style='margin-top:16px'><strong>Subtotal:</strong> ₹{invoice.Subtotal}</p>
+                    <p><strong>Discount:</strong> ₹{invoice.DiscountAmount}</p>
+                    <p style='font-size:18px'><strong>Grand Total:</strong> ₹{invoice.FinalAmount}</p>
+                </div>";
+
+            return SendAsync(toEmail, $"Order Invoice - {invoice.OrderNumber}", body);
+        }
 
         public Task SendOrderCancellationEmail(string toEmail, string orderNumber) =>
             SendAsync(toEmail, $"Order Cancelled - {orderNumber}", $@"

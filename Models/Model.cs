@@ -421,6 +421,10 @@ namespace Ecommerce_Backend.Models
 
         public int? VariantId { get; set; }
 
+        public int? ColorId { get; set; }
+
+        public int? SizeId { get; set; }
+
         public string? IpAddress { get; set; }
 
         public DateTime CreatedAt { get; set; }
@@ -534,6 +538,38 @@ namespace Ecommerce_Backend.Models
         public string PaymentMethod { get; set; }
 
         public string? CouponCode { get; set; }
+    }
+
+    public class BuyNowModel
+    {
+        public int AddressId { get; set; }
+        public int ProductId { get; set; }
+        public int? VariantId { get; set; }
+        public int? ColorId { get; set; }
+        public int? SizeId { get; set; }
+        public int Quantity { get; set; } = 1;
+        public string PaymentMethod { get; set; } = "ONLINE";
+        public string? CouponCode { get; set; }
+    }
+
+    public class VerifyPaymentModel
+    {
+        public int OrderId { get; set; }
+        public string RazorpayOrderId { get; set; } = string.Empty;
+        public string RazorpayPaymentId { get; set; } = string.Empty;
+        public string RazorpaySignature { get; set; } = string.Empty;
+    }
+
+    public class OrderInvoiceEmailModel
+    {
+        public string CustomerName { get; set; } = string.Empty;
+        public string OrderNumber { get; set; } = string.Empty;
+        public decimal Subtotal { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal FinalAmount { get; set; }
+        public string PaymentMethod { get; set; } = string.Empty;
+        public string PaymentStatus { get; set; } = string.Empty;
+        public List<OrderItemModel> Items { get; set; } = new();
     }
 
 

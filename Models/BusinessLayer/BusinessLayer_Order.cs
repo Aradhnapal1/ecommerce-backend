@@ -5,6 +5,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
    public partial interface IBusinessLayer
     {
         Task<IActionResult> CreateOrder(CreateOrderModel model, int userId);
+        Task<IActionResult> BuyNow(BuyNowModel model, int userId);
+        Task<IActionResult> VerifyOnlinePayment(VerifyPaymentModel model, int userId);
         Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin);
         Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin);
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
@@ -47,6 +49,41 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             }
 
             return await _databaseLayer.CreateOrder(model, userId);
+        }
+
+        public async Task<IActionResult> BuyNow(BuyNowModel model, int userId)
+        {
+            if (userId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Login required for buy now." });
+
+            if (model.AddressId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Invalid address ID" });
+
+            if (model.ProductId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Invalid product ID" });
+
+            if (string.IsNullOrWhiteSpace(model.PaymentMethod))
+                return new BadRequestObjectResult(new { success = false, message = "Payment method is required" });
+
+            return await _databaseLayer.BuyNow(model, userId);
+        }
+
+        public async Task<IActionResult> VerifyOnlinePayment(VerifyPaymentModel model, int userId)
+        {
+            if (userId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Invalid user ID" });
+
+            if (model.OrderId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Invalid order ID" });
+
+            if (string.IsNullOrWhiteSpace(model.RazorpayOrderId) ||
+                string.IsNullOrWhiteSpace(model.RazorpayPaymentId) ||
+                string.IsNullOrWhiteSpace(model.RazorpaySignature))
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Payment details are required." });
+            }
+
+            return await _databaseLayer.VerifyOnlinePayment(model, userId);
         }
 
         public async Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin)

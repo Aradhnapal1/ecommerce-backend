@@ -75,7 +75,10 @@ namespace Ecommerce_Backend.Controllers
 
             var ipAddress = UserContextHelper.GetClientIp(HttpContext);
             if (!string.IsNullOrWhiteSpace(ipAddress))
+            {
                 await _businessLayer.MergeGuestCartToUser(user.id, ipAddress);
+                await _businessLayer.MergeGuestWishlistToUser(user.id, ipAddress);
+            }
 
             string token = _jwtService.GenerateToken(user);
 

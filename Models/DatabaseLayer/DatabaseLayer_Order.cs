@@ -381,34 +381,27 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     // Commit Transaction
                     await transaction.CommitAsync();
 
-                    // Step 10: Send Order Confirmation Email
-                    try
-                    {
-                        var emailQuery = "SELECT email FROM user_register WHERE id = @UserId LIMIT 1";
-                        using var emailCmd = new NpgsqlCommand(emailQuery, con);
-                        emailCmd.Parameters.AddWithValue("@UserId", userId);
-                        var userEmail = (string?)await emailCmd.ExecuteScalarAsync();
-
-                        if (!string.IsNullOrEmpty(userEmail))
-                        {
-                            await _emailService.SendOrderConfirmationEmail(userEmail, orderNumber, finalAmount, model.PaymentMethod);
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore email errors to prevent order cancellation
-                    }
+                    var isOnline = model.PaymentMethod.Trim().ToUpperInvariant() == "ONLINE";
+                    object? razorpay = null;
+                    if (isOnline)
+                        razorpay = await TryCreateRazorpayCheckoutAsync(con, orderId, orderNumber, finalAmount);
+                    else
+                        await TrySendOrderInvoiceAsync(con, orderId, userId, "PENDING");
 
                     return new OkObjectResult(new
                     {
                         success = true,
-                        message = "Order created successfully",
+                        message = isOnline
+                            ? "Order created. Complete payment to confirm."
+                            : "Order created successfully",
                         data = new
                         {
                             orderId = orderId,
                             orderNumber = orderNumber,
                             finalAmount = finalAmount,
-                            paymentMethod = model.PaymentMethod
+                            paymentMethod = model.PaymentMethod,
+                            paymentStatus = paymentStatus,
+                            razorpay
                         }
                     });
                 }

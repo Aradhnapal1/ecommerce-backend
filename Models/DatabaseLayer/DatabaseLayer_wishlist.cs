@@ -1,6 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Ecommerce_Backend.Helpers;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
-using NuGet.Packaging.Signing;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
 {
@@ -11,6 +11,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         );
          Task<IActionResult> GetWishlist(int? userId, string? ipAddress);
          Task<IActionResult> WishlistDelete(int id, int? userId, string? ipAddress);
+         Task MergeGuestWishlistToUser(int userId, string ipAddress);
 
     }
 
@@ -25,6 +26,32 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     new NpgsqlConnection(DbConnection);
 
                 await con.OpenAsync();
+
+                if (wishlist.UserId.HasValue &&
+                    !string.IsNullOrWhiteSpace(wishlist.IpAddress))
+                {
+                    await WishlistHelper.MergeGuestWishlistToUserAsync(
+                        con,
+                        wishlist.UserId.Value,
+                        wishlist.IpAddress);
+                }
+
+                wishlist.VariantId = await CartHelper.ResolveVariantIdAsync(
+                    con,
+                    wishlist.ProductId,
+                    wishlist.VariantId,
+                    wishlist.ColorId,
+                    wishlist.SizeId);
+
+                if (!wishlist.VariantId.HasValue &&
+                    (wishlist.ColorId.HasValue || wishlist.SizeId.HasValue))
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "No variant found for the selected color and size."
+                    });
+                }
 
                 // =========================================
                 // Get ProductId From Variant
@@ -65,89 +92,25 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 }
 
                 // =========================================
-                // Guest Wishlist Migration
-                // =========================================
-
-                if (wishlist.UserId != null &&
-                    !string.IsNullOrWhiteSpace(wishlist.IpAddress))
-                {
-                    string migrateQuery = @"
-                UPDATE wishlist
-                SET
-                    userid = @userid,
-                    ipaddress = NULL
-                WHERE
-                    productid = @productid
-
-                    AND
-                    COALESCE(variantid,0)
-                    =
-                    COALESCE(@variantid,0)
-
-                    AND ipaddress = @ipaddress
-                    AND userid IS NULL";
-
-                    using var migrateCmd =
-                        new NpgsqlCommand(
-                            migrateQuery,
-                            con
-                        );
-
-                    migrateCmd.Parameters.AddWithValue(
-                        "@userid",
-                        wishlist.UserId
-                    );
-
-                    migrateCmd.Parameters.AddWithValue(
-                        "@productid",
-                        wishlist.ProductId
-                    );
-
-                    migrateCmd.Parameters.AddWithValue(
-                        "@variantid",
-                        wishlist.VariantId ??
-                        (object)DBNull.Value
-                    );
-
-                    migrateCmd.Parameters.AddWithValue(
-                        "@ipaddress",
-                        wishlist.IpAddress
-                    );
-
-                    int migratedRows =
-                        await migrateCmd.ExecuteNonQueryAsync();
-
-                    if (migratedRows > 0)
-                    {
-                        return new OkObjectResult(new
-                        {
-                            success = true,
-                            message = "Wishlist migrated successfully"
-                        });
-                    }
-                }
-
-                // =========================================
                 // Duplicate Check
                 // =========================================
 
-                string checkQuery = @"
-            SELECT COUNT(*)
-            FROM wishlist
-            WHERE
-                productid = @productid
-
-                AND
-                COALESCE(variantid,0)
-                =
-                COALESCE(@variantid,0)
-
-                AND
-                (
-                    userid = @userid
-                    OR
-                    ipaddress = @ipaddress
-                )";
+                string checkQuery = wishlist.UserId.HasValue
+                    ? """
+                SELECT COUNT(*)
+                FROM wishlist
+                WHERE productid = @productid
+                  AND COALESCE(variantid, 0) = COALESCE(@variantid, 0)
+                  AND userid = @userid
+                """
+                    : """
+                SELECT COUNT(*)
+                FROM wishlist
+                WHERE productid = @productid
+                  AND COALESCE(variantid, 0) = COALESCE(@variantid, 0)
+                  AND userid IS NULL
+                  AND ipaddress = @ipaddress
+                """;
 
                 using var checkCmd =
                     new NpgsqlCommand(
@@ -162,21 +125,13 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                 checkCmd.Parameters.AddWithValue(
                     "@variantid",
-                    wishlist.VariantId ??
-                    (object)DBNull.Value
+                    wishlist.VariantId ?? (object)DBNull.Value
                 );
 
-                checkCmd.Parameters.AddWithValue(
-                    "@userid",
-                    wishlist.UserId ??
-                    (object)DBNull.Value
-                );
-
-                checkCmd.Parameters.AddWithValue(
-                    "@ipaddress",
-                    wishlist.IpAddress ??
-                    (object)DBNull.Value
-                );
+                if (wishlist.UserId.HasValue)
+                    checkCmd.Parameters.AddWithValue("@userid", wishlist.UserId.Value);
+                else
+                    checkCmd.Parameters.AddWithValue("@ipaddress", wishlist.IpAddress ?? "");
 
                 int count =
                     Convert.ToInt32(
@@ -240,8 +195,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                 insertCmd.Parameters.AddWithValue(
                     "@ipaddress",
-                    wishlist.IpAddress ??
-                    (object)DBNull.Value
+                    wishlist.UserId.HasValue
+                        ? DBNull.Value
+                        : wishlist.IpAddress ?? ""
                 );
 
                 var wishlistId =
@@ -251,7 +207,11 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 {
                     success = true,
                     message = "Item added to wishlist successfully",
-                    wishlistId
+                    wishlistId,
+                    productId = wishlist.ProductId,
+                    variantId = wishlist.VariantId,
+                    colorId = wishlist.ColorId,
+                    sizeId = wishlist.SizeId
                 });
             }
             catch (Exception ex)
@@ -317,7 +277,15 @@ SELECT
     pv.saleprice AS variant_saleprice,
     pv.mrp AS variant_mrp,
     pv.stock AS variant_stock,
-    pv.variantimageurl
+    pv.variantimageurl,
+
+    c.id AS colorid,
+    c.color_name,
+    c.color_code,
+    c.slug AS color_slug,
+    s.id AS sizeid,
+    s.size_name,
+    s.slug AS size_slug
 
 FROM wishlist w
 
@@ -326,6 +294,17 @@ INNER JOIN products p
 
 LEFT JOIN product_variants pv
     ON pv.id = w.variantid
+
+LEFT JOIN colors c
+    ON c.id = CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER)
+
+LEFT JOIN LATERAL (
+    SELECT sz.id, sz.size_name, sz.slug
+    FROM sizes sz
+    WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
+    ORDER BY sz.id
+    LIMIT 1
+) s ON TRUE
 
 WHERE ";
 
@@ -378,41 +357,30 @@ WHERE ";
                     {
                         wishlistItem.Item = new
                         {
-                            Id =
-                                Convert.ToInt32(reader["variant_id"]),
-
-                            Name =
-                                reader["variantname"]?.ToString(),
-
-                            Slug =
-                                reader["variant_slug"]?.ToString(),
-
-                            SKU =
-                                reader["variant_sku"]?.ToString(),
-
-                            BasePrice =
-                                reader["variant_baseprice"] == DBNull.Value
+                            Id = Convert.ToInt32(reader["variant_id"]),
+                            Name = reader["variantname"]?.ToString(),
+                            Slug = reader["variant_slug"]?.ToString(),
+                            SKU = reader["variant_sku"]?.ToString(),
+                            BasePrice = reader["variant_baseprice"] == DBNull.Value
                                 ? (decimal?)null
                                 : Convert.ToDecimal(reader["variant_baseprice"]),
-
-                            SalePrice =
-                                reader["variant_saleprice"] == DBNull.Value
+                            SalePrice = reader["variant_saleprice"] == DBNull.Value
                                 ? (decimal?)null
                                 : Convert.ToDecimal(reader["variant_saleprice"]),
-
-                            MRP =
-                                reader["variant_mrp"] == DBNull.Value
+                            MRP = reader["variant_mrp"] == DBNull.Value
                                 ? (decimal?)null
                                 : Convert.ToDecimal(reader["variant_mrp"]),
-
-                            Stock =
-                                reader["variant_stock"] == DBNull.Value
+                            Stock = reader["variant_stock"] == DBNull.Value
                                 ? (int?)null
                                 : Convert.ToInt32(reader["variant_stock"]),
-
-                            Image =
-                                reader["variantimageurl"]?.ToString(),
-
+                            Image = reader["variantimageurl"]?.ToString(),
+                            ColorId = reader["colorid"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["colorid"]),
+                            ColorName = reader["color_name"]?.ToString(),
+                            ColorCode = reader["color_code"]?.ToString(),
+                            ColorSlug = reader["color_slug"]?.ToString(),
+                            SizeId = reader["sizeid"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["sizeid"]),
+                            SizeName = reader["size_name"]?.ToString(),
+                            SizeSlug = reader["size_slug"]?.ToString(),
                             ItemType = "VARIANT"
                         };
                     }
@@ -556,6 +524,15 @@ WHERE ";
                     StatusCode = 500
                 };
             }
+        }
+
+
+
+        public async Task MergeGuestWishlistToUser(int userId, string ipAddress)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+            await WishlistHelper.MergeGuestWishlistToUserAsync(con, userId, ipAddress);
         }
 
     }

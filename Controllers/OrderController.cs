@@ -25,6 +25,20 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.CreateOrder(model, userId);
         }
 
+        [HttpPost("buy-now")]
+        public async Task<IActionResult> BuyNow([FromBody] BuyNowModel model)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.BuyNow(model, userId);
+        }
+
+        [HttpPost("verify-payment")]
+        public async Task<IActionResult> VerifyPayment([FromBody] VerifyPaymentModel model)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.VerifyOnlinePayment(model, userId);
+        }
+
         [HttpGet("all")]
         [Authorize]
         public async Task<IActionResult> GetAllOrders()

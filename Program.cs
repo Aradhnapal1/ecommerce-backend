@@ -128,6 +128,7 @@ builder.Services.Configure<CloudinarySettings>(
 builder.Services.AddScoped<CloudinaryService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddHttpClient<IRazorpayService, RazorpayService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IDatabaseLayer, DataBaseLayer>();
 builder.Services.AddScoped<IBusinessLayer, BusinessLayer>();

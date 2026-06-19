@@ -736,14 +736,14 @@ WHERE id = @cartid";
                 if (userId.HasValue)
                 {
                     query = @"
-DELETE FROM addcart
-WHERE userid = @userid";
+                DELETE FROM addcart
+                WHERE userid = @userid";
                 }
                 else
                 {
                     query = @"
-DELETE FROM addcart
-WHERE ipaddress = @ipaddress";
+                    DELETE FROM addcart
+                    WHERE ipaddress = @ipaddress";
                 }
 
                 using var cmd = new NpgsqlCommand(query, con);

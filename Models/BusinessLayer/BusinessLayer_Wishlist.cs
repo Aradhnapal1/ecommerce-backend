@@ -9,6 +9,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         );
          Task<IActionResult> GetWishlist(int? userId, string? ipAddress);
          Task<IActionResult> WishlistDelete(int id, int? userId, string? ipAddress);
+         Task MergeGuestWishlistToUser(int userId, string ipAddress);
     }
 
     public partial class BusinessLayer : IBusinessLayer
@@ -29,5 +30,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             return await _databaseLayer.WishlistDelete(id, userId, ipAddress);
         }
+
+        public Task MergeGuestWishlistToUser(int userId, string ipAddress) =>
+            _databaseLayer.MergeGuestWishlistToUser(userId, ipAddress);
     }
 }
