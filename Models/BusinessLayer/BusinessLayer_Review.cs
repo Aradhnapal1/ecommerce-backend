@@ -7,7 +7,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     {
         Task<IActionResult> AddProductReview(int userId, AddReviewRequest request);
         Task<IActionResult> GetProductReviews(int productId);
-        Task<IActionResult> DeleteProductReview(int reviewId);
+        Task<IActionResult> DeleteProductReview(int reviewId, int? userId, bool isAdmin);
     }
 
     public partial class BusinessLayer
@@ -21,9 +21,10 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             return await _databaseLayer.GetProductReviews(productId);
         }
-        public async Task<IActionResult> DeleteProductReview(int reviewId)
+
+        public async Task<IActionResult> DeleteProductReview(int reviewId, int? userId, bool isAdmin)
         {
-            return await _databaseLayer.DeleteProductReview(reviewId);
+            return await _databaseLayer.DeleteProductReview(reviewId, userId, isAdmin);
         }
     }
 }

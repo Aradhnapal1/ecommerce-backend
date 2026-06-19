@@ -232,7 +232,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     // Step 4: Calculate Final Amount
                     decimal finalAmount = subtotal - discountAmount;
 
-                    string paymentStatus = model.PaymentMethod.Equals("COD", StringComparison.OrdinalIgnoreCase) ? "PENDING" : "SUCCESS";
+                    string paymentStatus = "PENDING";
 
                     // Step 5: Create Order
                     string orderNumber = "ORD" + DateTime.Now.Ticks;

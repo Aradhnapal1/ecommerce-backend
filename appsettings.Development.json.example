@@ -1,0 +1,22 @@
+{
+  "ConnectionStrings": {
+    "AppDbContextConnection": "Host=116.203.133.249;Port=5466;Database=Ecommerce_Aradhna;Username=postgres;Password=YOUR_PASSWORD"
+  },
+  "GuestSession": {
+    "SigningKey": "CHANGE_ME_GuestSessionSigningKey_Min32Chars!!"
+  },
+  "Smtp": {
+    "Username": "your-email@gmail.com",
+    "Password": "your-app-password",
+    "FromEmail": "your-email@gmail.com"
+  },
+  "Jwt": {
+    "Key": "CHANGE_ME_JwtSigningKey_Min32CharactersLong!!",
+    "ExpireDays": "1"
+  },
+  "CloudinarySettings": {
+    "CloudName": "your-cloud-name",
+    "ApiKey": "your-api-key",
+    "ApiSecret": "your-api-secret"
+  }
+}

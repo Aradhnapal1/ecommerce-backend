@@ -4,6 +4,7 @@ using Ecommerce_Backend.Models.BusinessLayer;
 using Ecommerce_Backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -21,6 +22,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("register")]
+        [EnableRateLimiting("auth")]
         public async Task<IActionResult> Register([FromBody] UserRegisterRequest model)
         {
             if (string.IsNullOrWhiteSpace(model.first_name) ||
@@ -30,6 +32,9 @@ namespace Ecommerce_Backend.Controllers
                 string.IsNullOrWhiteSpace(model.password) ||
                 string.IsNullOrWhiteSpace(model.role))
                 return BadRequest(new { message = "All fields are required" });
+
+            if (!UserContextHelper.IsStrongPassword(model.password))
+                return BadRequest(new { message = "Password must be at least 8 characters long." });
 
             if (!string.Equals(model.role, AuthRoles.User, StringComparison.OrdinalIgnoreCase))
                 return BadRequest(new { message = "Only USER role is allowed for self-registration" });
@@ -42,6 +47,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("verify-otp")]
+        [EnableRateLimiting("auth")]
         public async Task<IActionResult> VerifyOtp([FromBody] UserVerifyOtpRequest model)
         {
             if (string.IsNullOrWhiteSpace(model.email) ||
@@ -56,6 +62,7 @@ namespace Ecommerce_Backend.Controllers
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting("auth")]
         public async Task<IActionResult> Login([FromBody] UserLoginRequest model)
         {
             if (string.IsNullOrWhiteSpace(model.email) ||
@@ -127,17 +134,43 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.DeleteUser(id);
         }
 
+        /// <summary>
+        /// Step 1: User enters email → reset link sent to inbox (valid 1 hour).
+        /// </summary>
         [HttpPost("forgot-password")]
         [AllowAnonymous]
+        [EnableRateLimiting("auth")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest model)
         {
+            if (model == null || string.IsNullOrWhiteSpace(model.Email))
+                return BadRequest(new { success = false, message = "Email is required." });
+
             return await _businessLayer.ForgotPassword(model);
         }
 
+        /// <summary>
+        /// Step 2: User submits email + token from link + new password.
+        /// </summary>
         [HttpPost("reset-password")]
         [AllowAnonymous]
+        [EnableRateLimiting("auth")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest model)
         {
+            if (model == null ||
+                string.IsNullOrWhiteSpace(model.Email) ||
+                string.IsNullOrWhiteSpace(model.Token) ||
+                string.IsNullOrWhiteSpace(model.NewPassword))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Email, token and new password are required."
+                });
+            }
+
+            if (!UserContextHelper.IsStrongPassword(model.NewPassword))
+                return BadRequest(new { success = false, message = "Password must be at least 8 characters long." });
+
             return await _businessLayer.ResetPassword(model);
         }
 

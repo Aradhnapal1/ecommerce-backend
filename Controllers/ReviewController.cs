@@ -19,33 +19,33 @@ namespace Ecommerce_Backend.Controllers
             _businessLayer = businessLayer;
         }
 
-        // Get All Reviews of a specific Product (Open for all)
         [HttpGet("product/{productId}")]
         public async Task<IActionResult> GetProductReviews(int productId)
         {
             return await _businessLayer.GetProductReviews(productId);
         }
 
-        // Add Review (Only Logged-in Users)
         [HttpPost("add")]
         [Authorize]
         public async Task<IActionResult> AddReview([FromBody] AddReviewRequest request)
         {
-            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!int.TryParse(userIdStr, out int userId))
+            var userId = UserContextHelper.GetUserId(User);
+            if (!userId.HasValue)
             {
-                return Unauthorized(new { success = false, message = "Invalid User Token" });
+                return Unauthorized(new { success = false, message = "Invalid user token." });
             }
 
-            return await _businessLayer.AddProductReview(userId, request);
+            return await _businessLayer.AddProductReview(userId.Value, request);
         }
 
-        // Delete Review (Only Admin)
         [HttpDelete("delete/{reviewId}")]
-        [Authorize(Roles = AuthRoles.Admin)]
+        [Authorize]
         public async Task<IActionResult> DeleteReview(int reviewId)
         {
-            return await _businessLayer.DeleteProductReview(reviewId);
+            var userId = UserContextHelper.GetUserId(User);
+            var isAdmin = UserContextHelper.IsAdmin(User);
+
+            return await _businessLayer.DeleteProductReview(reviewId, userId, isAdmin);
         }
     }
 }

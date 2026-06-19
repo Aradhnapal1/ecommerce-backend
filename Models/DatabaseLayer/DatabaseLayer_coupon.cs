@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
@@ -6,6 +6,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     public partial interface IDatabaseLayer
     {
         Task<IActionResult> GetCoupons();
+        Task<IActionResult> GetActiveCoupons();
         Task<IActionResult> AddCoupon([FromBody] CouponModel coupon);
         Task<IActionResult> EditCoupun(int id, [FromBody] CouponModel coupon);
         Task<IActionResult> DeleteCoupon(int id);
@@ -72,9 +73,54 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                 return new OkObjectResult(coupons);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return new BadRequestObjectResult(ex.Message);
+                return new BadRequestObjectResult(new { success = false, message = "Unable to fetch coupons." });
+            }
+        }
+
+        public async Task<IActionResult> GetActiveCoupons()
+        {
+            try
+            {
+                var coupons = new List<object>();
+
+                using var connection = new NpgsqlConnection(DbConnection);
+                await connection.OpenAsync();
+
+                var command = new NpgsqlCommand(@"
+    SELECT
+        coupon_code,
+        coupon_type,
+        coupon_value,
+        min_order_amount,
+        end_date
+    FROM coupons
+    WHERE is_active = TRUE
+      AND start_date <= NOW()
+      AND end_date >= NOW()
+    ORDER BY id DESC
+", connection);
+
+                using var reader = await command.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    coupons.Add(new
+                    {
+                        couponCode = reader["coupon_code"]?.ToString(),
+                        couponType = reader["coupon_type"]?.ToString(),
+                        discountAmount = Convert.ToDecimal(reader["coupon_value"]),
+                        minimumPurchaseAmount = Convert.ToDecimal(reader["min_order_amount"]),
+                        expiryDate = Convert.ToDateTime(reader["end_date"])
+                    });
+                }
+
+                return new OkObjectResult(new { success = true, data = coupons });
+            }
+            catch (Exception)
+            {
+                return new BadRequestObjectResult(new { success = false, message = "Unable to fetch active coupons." });
             }
         }
 

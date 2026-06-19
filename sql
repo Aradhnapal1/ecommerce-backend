@@ -5,9 +5,10 @@ CREATE TABLE user_register
     last_name    VARCHAR(100) NOT NULL,
     email        VARCHAR(150) UNIQUE NOT NULL,
     phone_number VARCHAR(15)  NOT NULL,
-    pass    ord     TEXT         NOT NULL,
+    password     TEXT         NOT NULL,
     role         VARCHAR(50)  NOT NULL,
-    otp          VARCHAR(10),
+    otp          VARCHAR(128),
+    otp_expires_at TIMESTAMP,
     is_verified  BOOLEAN      DEFAULT FALSE,
     created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );

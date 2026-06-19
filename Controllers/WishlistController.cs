@@ -10,20 +10,21 @@ namespace Ecommerce_Backend.Controllers
     public class WishlistController : ControllerBase
     {
         private readonly IBusinessLayer _businessLayer;
+        private readonly IConfiguration _configuration;
 
-        public WishlistController(IBusinessLayer businessLayer)
+        public WishlistController(IBusinessLayer businessLayer, IConfiguration configuration)
         {
             _businessLayer = businessLayer;
+            _configuration = configuration;
         }
 
         [HttpPost("add")]
         public async Task<IActionResult> AddWishlist([FromForm] WishlistModel wishlist)
         {
-            var currentIp = UserContextHelper.GetClientIp(HttpContext);
-            var userId = UserContextHelper.GetUserId(User);
-
-            wishlist.UserId = userId;
-            wishlist.IpAddress = currentIp;
+            wishlist.UserId = UserContextHelper.GetUserId(User);
+            wishlist.IpAddress = wishlist.UserId.HasValue
+                ? null
+                : GuestSessionHelper.GetOrCreateGuestSessionId(HttpContext, _configuration);
 
             return await _businessLayer.AddWishlist(wishlist);
         }
@@ -32,18 +33,22 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> GetWishlist()
         {
             var userId = UserContextHelper.GetUserId(User);
-            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+            var guestId = userId.HasValue
+                ? null
+                : GuestSessionHelper.ResolveGuestIdentifier(HttpContext, _configuration);
 
-            return await _businessLayer.GetWishlist(userId, ipAddress);
+            return await _businessLayer.GetWishlist(userId, guestId);
         }
 
         [HttpDelete("delete/{id}")]
         public async Task<IActionResult> WishlistDelete(int id)
         {
             var userId = UserContextHelper.GetUserId(User);
-            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+            var guestId = userId.HasValue
+                ? null
+                : GuestSessionHelper.ResolveGuestIdentifier(HttpContext, _configuration);
 
-            return await _businessLayer.WishlistDelete(id, userId, ipAddress);
+            return await _businessLayer.WishlistDelete(id, userId, guestId);
         }
     }
 }

@@ -17,7 +17,14 @@ namespace Ecommerce_Backend.Controllers
             _businessLayer = businessLayer;
         }
 
+        [HttpGet("active")]
+        public async Task<IActionResult> GetActiveCoupons()
+        {
+            return await _businessLayer.GetActiveCoupons();
+        }
+
         [HttpGet("getcoupons")]
+        [Authorize(Roles = AuthRoles.Admin)]
         public async Task<IActionResult> GetCoupons()
         {
             return await _businessLayer.GetCoupons();

@@ -2,6 +2,7 @@
 using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -10,17 +11,21 @@ namespace Ecommerce_Backend.Controllers
     public class AddCartController : ControllerBase
     {
         private readonly IBusinessLayer _businessLayer;
+        private readonly IConfiguration _configuration;
 
-        public AddCartController(IBusinessLayer businessLayer)
+        public AddCartController(IBusinessLayer businessLayer, IConfiguration configuration)
         {
             _businessLayer = businessLayer;
+            _configuration = configuration;
         }
 
         [HttpPost("add")]
         public async Task<IActionResult> AddCart([FromForm] AddCartModel cart)
         {
-            cart.IpAddress = UserContextHelper.GetClientIp(HttpContext);
             cart.UserId = UserContextHelper.GetUserId(User);
+            cart.IpAddress = cart.UserId.HasValue
+                ? null
+                : GuestSessionHelper.GetOrCreateGuestSessionId(HttpContext, _configuration);
 
             return await _businessLayer.AddCart(cart);
         }
@@ -29,16 +34,20 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> GetCart()
         {
             var userId = UserContextHelper.GetUserId(User);
-            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+            var guestId = userId.HasValue
+                ? null
+                : GuestSessionHelper.ResolveGuestIdentifier(HttpContext, _configuration);
 
-            return await _businessLayer.GetCart(userId, ipAddress);
+            return await _businessLayer.GetCart(userId, guestId);
         }
 
         [HttpPut("update-quantity")]
         public async Task<IActionResult> UpdateCartQuantity([FromForm] UpdateCartQuantityModel model)
         {
-            model.IpAddress = UserContextHelper.GetClientIp(HttpContext);
             model.UserId = UserContextHelper.GetUserId(User);
+            model.IpAddress = model.UserId.HasValue
+                ? null
+                : GuestSessionHelper.ResolveGuestIdentifier(HttpContext, _configuration);
 
             return await _businessLayer.UpdateCartQuantity(model);
         }
@@ -47,18 +56,22 @@ namespace Ecommerce_Backend.Controllers
         public async Task<IActionResult> DeleteCartItem(int id)
         {
             var userId = UserContextHelper.GetUserId(User);
-            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+            var guestId = userId.HasValue
+                ? null
+                : GuestSessionHelper.ResolveGuestIdentifier(HttpContext, _configuration);
 
-            return await _businessLayer.DeleteCartItem(id, userId, ipAddress);
+            return await _businessLayer.DeleteCartItem(id, userId, guestId);
         }
 
         [HttpDelete("clear")]
         public async Task<IActionResult> ClearCart()
         {
             var userId = UserContextHelper.GetUserId(User);
-            var ipAddress = userId.HasValue ? null : UserContextHelper.GetClientIp(HttpContext);
+            var guestId = userId.HasValue
+                ? null
+                : GuestSessionHelper.ResolveGuestIdentifier(HttpContext, _configuration);
 
-            return await _businessLayer.ClearCart(userId, ipAddress);
+            return await _businessLayer.ClearCart(userId, guestId);
         }
     }
 }

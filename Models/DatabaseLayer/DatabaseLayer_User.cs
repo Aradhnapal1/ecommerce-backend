@@ -1,9 +1,9 @@
 ﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using Ecommerce_Backend.Helpers;
 using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Razor.Language.Intermediate;
 using Npgsql;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
@@ -28,22 +28,20 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         private readonly IEmailService _emailService;
 
-        private static string GenerateOtp()
-            => new Random().Next(100000, 999999).ToString();
+        private static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan ResetTokenLifetime = TimeSpan.FromHours(1);
 
-        // ---------------- REGISTER ----------------
         public async Task<bool> UserRegister(UserRegisterRequest model)
         {
-            // Role validate karo
-            var allowedRoles = new[] { "ADMIN", "USER" };
-            if (string.IsNullOrWhiteSpace(model.role) ||
-                !allowedRoles.Contains(model.role.ToUpper()))
+            if (!UserContextHelper.IsStrongPassword(model.password))
+                return false;
+
+            if (!string.Equals(model.role, AuthRoles.User, StringComparison.OrdinalIgnoreCase))
                 return false;
 
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
-            // Check karo — email exists hai aur verified bhi hai?
             using var checkCmd = new NpgsqlCommand(@"
         SELECT is_verified FROM user_register 
         WHERE email = @email
@@ -54,69 +52,70 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             if (result != null && result != DBNull.Value)
             {
                 bool isVerified = Convert.ToBoolean(result);
-
-                // ✅ Already verified — email already exists error
                 if (isVerified) return false;
 
-                // ✅ Not verified — purana record delete karo
                 using var deleteCmd = new NpgsqlCommand(
                     "DELETE FROM user_register WHERE email = @email", con);
                 deleteCmd.Parameters.AddWithValue("@email", model.email ?? "");
                 await deleteCmd.ExecuteNonQueryAsync();
             }
 
-            // Naya OTP generate karo + password hash karo
-            string otp = GenerateOtp();
+            string otp = SecurityTokenHelper.GenerateOtp();
             string hash = BCrypt.Net.BCrypt.HashPassword(model.password);
+            var otpExpiresAt = DateTime.UtcNow.Add(OtpLifetime);
 
-            // Fresh insert karo
             using var cmd = new NpgsqlCommand(@"
         INSERT INTO user_register
-            (first_name, last_name, email, phone_number, password, role, otp, is_verified)
+            (first_name, last_name, email, phone_number, password, role, otp, otp_expires_at, is_verified)
         VALUES
-            (@first_name, @last_name, @email, @phone_number, @password, @role, @otp, @is_verified)
+            (@first_name, @last_name, @email, @phone_number, @password, @role, @otp, @otp_expires_at, @is_verified)
     ", con);
             cmd.Parameters.AddWithValue("@first_name", model.first_name ?? "");
             cmd.Parameters.AddWithValue("@last_name", model.last_name ?? "");
             cmd.Parameters.AddWithValue("@email", model.email ?? "");
             cmd.Parameters.AddWithValue("@phone_number", model.phone_number ?? "");
             cmd.Parameters.AddWithValue("@password", hash);
-            cmd.Parameters.AddWithValue("@role", model.role.ToUpper());
+            cmd.Parameters.AddWithValue("@role", AuthRoles.User);
             cmd.Parameters.AddWithValue("@otp", otp);
+            cmd.Parameters.AddWithValue("@otp_expires_at", otpExpiresAt);
             cmd.Parameters.AddWithValue("@is_verified", false);
             await cmd.ExecuteNonQueryAsync();
 
-            // OTP email bhejo
             await _emailService.SendOtp(model.email!, otp);
             return true;
         }
 
-        // ---------------- VERIFY OTP ----------------
         public async Task<bool> UserVerifyOtp(UserVerifyOtpRequest model)
         {
             using var con = new NpgsqlConnection(DbConnection);
             await con.OpenAsync();
 
             using var cmd = new NpgsqlCommand(@"
-                SELECT COUNT(*) FROM user_register
-                WHERE email = @email AND otp = @otp
+                SELECT otp_expires_at FROM user_register
+                WHERE email = @email AND otp = @otp AND is_verified = FALSE
             ", con);
             cmd.Parameters.AddWithValue("@email", model.email ?? "");
             cmd.Parameters.AddWithValue("@otp", model.otp ?? "");
-            int count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-            if (count == 0) return false;
+
+            var expiresAtObj = await cmd.ExecuteScalarAsync();
+            if (expiresAtObj == null || expiresAtObj == DBNull.Value)
+                return false;
+
+            var expiresAt = Convert.ToDateTime(expiresAtObj).ToUniversalTime();
+            if (SecurityTokenHelper.IsExpired(expiresAt))
+                return false;
 
             using var updateCmd = new NpgsqlCommand(@"
                 UPDATE user_register
                 SET is_verified = TRUE,
-                    otp         = NULL
+                    otp         = NULL,
+                    otp_expires_at = NULL
                 WHERE email = @email
             ", con);
             updateCmd.Parameters.AddWithValue("@email", model.email ?? "");
             await updateCmd.ExecuteNonQueryAsync();
             return true;
         }
-
 
         public async Task<UserLoginResponse?> UserLogin(UserLoginRequest model)
         {
@@ -154,10 +153,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             };
         }
 
-
-
-
-
         public async Task<UserLoginResponse?> GetUserById(int id)
         {
             using var con = new NpgsqlConnection(DbConnection);
@@ -188,7 +183,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             };
         }
 
-        // Get All Users
         public async Task<List<UserLoginResponse>> GetAllUsers()
         {
             using var con = new NpgsqlConnection(DbConnection);
@@ -258,34 +252,49 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                var checkQuery = "SELECT id FROM user_register WHERE email = @Email AND is_verified = TRUE";
+                var checkQuery = @"
+                    SELECT id, email
+                    FROM user_register
+                    WHERE LOWER(email) = LOWER(@Email) AND is_verified = TRUE";
                 using var checkCmd = new NpgsqlCommand(checkQuery, con);
                 checkCmd.Parameters.AddWithValue("@Email", email);
-                var userId = await checkCmd.ExecuteScalarAsync();
 
-                if (userId == null)
+                int userId;
+                string registeredEmail;
+                await using (var reader = await checkCmd.ExecuteReaderAsync())
                 {
-                    // Don't reveal if the user exists or not for security
-                    return new OkObjectResult(new { success = true, message = "If an account with this email exists, a password reset link has been sent." });
+                    if (!await reader.ReadAsync())
+                    {
+                        return new OkObjectResult(new { success = true, message = "If an account with this email exists, a password reset link has been sent." });
+                    }
+
+                    userId = reader.GetInt32(reader.GetOrdinal("id"));
+                    registeredEmail = reader.GetString(reader.GetOrdinal("email"));
                 }
 
-                var token = GenerateOtp();
+                var token = SecurityTokenHelper.GenerateSecureToken();
+                var expiresAt = DateTime.UtcNow.Add(ResetTokenLifetime);
 
-                var updateQuery = "UPDATE user_register SET otp = @Token WHERE id = @UserId";
+                var updateQuery = @"
+                    UPDATE user_register
+                    SET otp = @Token, otp_expires_at = @ExpiresAt
+                    WHERE id = @UserId";
                 using var updateCmd = new NpgsqlCommand(updateQuery, con);
                 updateCmd.Parameters.AddWithValue("@Token", token);
-                updateCmd.Parameters.AddWithValue("@UserId", (int)userId);
+                updateCmd.Parameters.AddWithValue("@ExpiresAt", expiresAt);
+                updateCmd.Parameters.AddWithValue("@UserId", userId);
                 await updateCmd.ExecuteNonQueryAsync();
 
-                // This should be a URL to your frontend reset page
-                var resetLink = $"http://localhost:3000/reset-password?email={Uri.EscapeDataString(email)}&token={token}";
-                await _emailService.SendPasswordResetEmail(email, resetLink);
+                var resetBaseUrl = _configuration["Frontend:ResetPasswordUrl"]
+                    ?? "http://localhost:3000/reset-password";
+                var resetLink = $"{resetBaseUrl}?email={Uri.EscapeDataString(registeredEmail)}&token={Uri.EscapeDataString(token)}";
+                await _emailService.SendPasswordResetEmail(registeredEmail, resetLink);
 
                 return new OkObjectResult(new { success = true, message = "If an account with this email exists, a password reset link has been sent." });
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
 
@@ -293,32 +302,59 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         {
             try
             {
+                if (!UserContextHelper.IsStrongPassword(model.NewPassword))
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "Password must be at least 8 characters long."
+                    });
+                }
+
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                var checkQuery = "SELECT id FROM user_register WHERE email = @Email AND otp = @Token AND is_verified = TRUE";
+                var checkQuery = @"
+                    SELECT id, otp_expires_at
+                    FROM user_register
+                    WHERE LOWER(email) = LOWER(@Email) AND otp = @Token AND is_verified = TRUE";
                 using var checkCmd = new NpgsqlCommand(checkQuery, con);
                 checkCmd.Parameters.AddWithValue("@Email", model.Email);
-                var userId = await checkCmd.ExecuteScalarAsync();
+                checkCmd.Parameters.AddWithValue("@Token", model.Token);
 
-                if (userId == null)
+                using var reader = await checkCmd.ExecuteReaderAsync();
+                if (!await reader.ReadAsync())
                 {
-                    return new BadRequestObjectResult(new { success = false, message = "Invalid token or email." });
+                    return new BadRequestObjectResult(new { success = false, message = "Invalid or expired reset token." });
+                }
+
+                var userId = reader.GetInt32(reader.GetOrdinal("id"));
+                var expiresAt = reader.IsDBNull(reader.GetOrdinal("otp_expires_at"))
+                    ? (DateTime?)null
+                    : reader.GetDateTime(reader.GetOrdinal("otp_expires_at")).ToUniversalTime();
+                await reader.CloseAsync();
+
+                if (SecurityTokenHelper.IsExpired(expiresAt))
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Invalid or expired reset token." });
                 }
 
                 var newPasswordHash = BCrypt.Net.BCrypt.HashPassword(model.NewPassword);
 
-                var updateQuery = "UPDATE user_register SET password = @Password, otp = NULL WHERE id = @UserId";
+                var updateQuery = @"
+                    UPDATE user_register
+                    SET password = @Password, otp = NULL, otp_expires_at = NULL
+                    WHERE id = @UserId";
                 using var updateCmd = new NpgsqlCommand(updateQuery, con);
                 updateCmd.Parameters.AddWithValue("@Password", newPasswordHash);
-                updateCmd.Parameters.AddWithValue("@UserId", (int)userId);
+                updateCmd.Parameters.AddWithValue("@UserId", userId);
                 await updateCmd.ExecuteNonQueryAsync();
 
                 return new OkObjectResult(new { success = true, message = "Password has been reset successfully." });
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
 
@@ -326,6 +362,15 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         {
             try
             {
+                if (!UserContextHelper.IsStrongPassword(model.NewPassword))
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "Password must be at least 8 characters long."
+                    });
+                }
+
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
@@ -355,7 +400,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
 
@@ -397,12 +442,10 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                 if (model.ProfileImage != null)
                 {
-                    // Get old image url to delete it
                     var getOldImageCmd = new NpgsqlCommand("SELECT profile_image_url FROM user_register WHERE id = @UserId", con);
                     getOldImageCmd.Parameters.AddWithValue("@UserId", userId);
                     var oldImageUrl = (await getOldImageCmd.ExecuteScalarAsync()) as string;
 
-                    // Cloudinary setup
                     var account = new Account(
                         _configuration["CloudinarySettings:CloudName"],
                         _configuration["CloudinarySettings:ApiKey"],
@@ -410,7 +453,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     );
                     var cloudinary = new Cloudinary(account);
 
-                    // Delete old image if it exists
                     if (!string.IsNullOrEmpty(oldImageUrl))
                     {
                         try
@@ -419,10 +461,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             var publicId = Path.GetFileNameWithoutExtension(uri.AbsolutePath);
                             await cloudinary.DestroyAsync(new DeletionParams($"profile_images/{publicId}"));
                         }
-                        catch { /* Ignore delete errors */ }
+                        catch { }
                     }
 
-                    // Upload new image
                     string newImageUrl;
                     using (var stream = model.ProfileImage.OpenReadStream())
                     {
@@ -445,7 +486,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     return new BadRequestObjectResult(new { success = false, message = "No fields to update." });
                 }
 
-                setClauses.Add("updatedat = NOW()");
                 var query = $"UPDATE user_register SET {string.Join(", ", setClauses)} WHERE id = @UserId";
 
                 using var cmd = new NpgsqlCommand(query, con);
@@ -462,7 +502,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
 
@@ -507,17 +547,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
     }
 }
-
-
-
-
-
-
-
-
-   

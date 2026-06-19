@@ -6,6 +6,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
     public partial interface IBusinessLayer
     {
         Task<IActionResult> GetCoupons();
+        Task<IActionResult> GetActiveCoupons();
         Task<IActionResult> AddCoupon([FromBody] CouponModel coupon);
         Task<IActionResult> EditCoupun(int id, [FromBody] CouponModel coupon);
         Task<IActionResult> DeleteCoupon(int id);
@@ -17,6 +18,11 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             var result = await _databaseLayer.GetCoupons();
             return result;
+        }
+
+        public async Task<IActionResult> GetActiveCoupons()
+        {
+            return await _databaseLayer.GetActiveCoupons();
         }
 
         public async Task<IActionResult> AddCoupon([FromBody] CouponModel coupon)

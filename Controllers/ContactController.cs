@@ -3,6 +3,7 @@ using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.BusinessLayer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Ecommerce_Backend.Controllers
 {
@@ -25,6 +26,7 @@ namespace Ecommerce_Backend.Controllers
 
 
         [HttpPost("addcontact")]
+        [EnableRateLimiting("contact")]
         public async Task<IActionResult> CreateContact([FromForm] ContactModel contact)
         {
             return await _businessLayer.CreateContact(contact);

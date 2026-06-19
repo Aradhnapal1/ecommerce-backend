@@ -1,4 +1,4 @@
-﻿﻿﻿﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Models;
 using System.Net;
 using System.Net.Mail;
 
@@ -13,70 +13,39 @@ namespace Ecommerce_Backend.Services
         Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod);
         Task SendOrderCancellationEmail(string toEmail, string orderNumber);
         Task SendPasswordResetEmail(string toEmail, string resetLink);
-
     }
 
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _configuration;
+        private readonly ILogger<EmailService> _logger;
 
-        public EmailService(IConfiguration configuration)
+        static EmailService()
         {
-            _configuration = configuration;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
-        public async Task SendOtp(string toEmail, string otp)
+        public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
-            var smtp = _configuration.GetSection("Smtp");
+            _configuration = configuration;
+            _logger = logger;
+        }
 
-            var client = new SmtpClient(smtp["Host"])
-            {
-                Port = int.Parse(smtp["Port"]!),
-                Credentials = new NetworkCredential(
-                                            smtp["Username"],
-                                            smtp["Password"]),
-                EnableSsl = true,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                UseDefaultCredentials = false   // ✅ ye important hai
-            };
-
-            var mail = new MailMessage
-            {
-                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
-                Subject = "OTP Verification",
-                Body = $@"
+        public Task SendOtp(string toEmail, string otp) =>
+            SendAsync(toEmail, "OTP Verification", $@"
                     <h2>Email Verification</h2>
                     <p>Your OTP is:</p>
                     <h1 style='color:#4A90E2; letter-spacing:4px'>{otp}</h1>
                     <p>Valid for 10 minutes. Do not share this OTP.</p>
-                ",
-                IsBodyHtml = true
-            };
-
-            mail.To.Add(toEmail);
-            await client.SendMailAsync(mail);
-            client.Dispose();
-        }
-
-
+                ");
 
         public async Task SendContactNotification(ContactModel contact)
         {
             var smtp = _configuration.GetSection("Smtp");
-            var client = new SmtpClient(smtp["Host"])
-            {
-                Port = int.Parse(smtp["Port"]!),
-                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
-                EnableSsl = true,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                UseDefaultCredentials = false
-            };
+            var adminEmail = smtp["FromEmail"]
+                ?? throw new InvalidOperationException("Smtp:FromEmail is not configured.");
 
-            var mail = new MailMessage
-            {
-                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
-                Subject = "New Contact Form Submission",
-                Body = $@"
+            await SendAsync(adminEmail, "New Contact Form Submission", $@"
             <h2>New Contact Received</h2>
             <table style='border-collapse:collapse;width:100%'>
                 <tr><td style='padding:8px;font-weight:bold'>Name</td>
@@ -90,34 +59,11 @@ namespace Ecommerce_Backend.Services
                 <tr><td style='padding:8px;font-weight:bold'>Submitted At</td>
                     <td style='padding:8px'>{contact.CreatedAt:dd MMM yyyy, hh:mm tt}</td></tr>
             </table>
-        ",
-                IsBodyHtml = true
-            };
-
-            // Notification jaayegi admin ke email pe (appsettings se)
-            mail.To.Add(smtp["FromEmail"]!);
-
-            await client.SendMailAsync(mail);
-            client.Dispose();
+        ");
         }
 
-        public async Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod)
-        {
-            var smtp = _configuration.GetSection("Smtp");
-            var client = new SmtpClient(smtp["Host"])
-            {
-                Port = int.Parse(smtp["Port"]!),
-                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
-                EnableSsl = true,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                UseDefaultCredentials = false
-            };
-
-            var mail = new MailMessage
-            {
-                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
-                Subject = $"Order Confirmation - {orderNumber}",
-                Body = $@"
+        public Task SendOrderConfirmationEmail(string toEmail, string orderNumber, decimal finalAmount, string paymentMethod) =>
+            SendAsync(toEmail, $"Order Confirmation - {orderNumber}", $@"
                     <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
                         <h2 style='color: #4A90E2;'>Thank you for your order!</h2>
                         <p>Your order has been placed successfully.</p>
@@ -128,64 +74,20 @@ namespace Ecommerce_Backend.Services
                         <br/>
                         <p style='color: #555;'>We will notify you once your order is shipped. Thank you for shopping with us!</p>
                     </div>
-                ",
-                IsBodyHtml = true
-            };
+                ");
 
-            mail.To.Add(toEmail);
-            await client.SendMailAsync(mail);
-            client.Dispose();
-        }
-
-        public async Task SendOrderCancellationEmail(string toEmail, string orderNumber)
-        {
-            var smtp = _configuration.GetSection("Smtp");
-            var client = new SmtpClient(smtp["Host"])
-            {
-                Port = int.Parse(smtp["Port"]!),
-                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
-                EnableSsl = true,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                UseDefaultCredentials = false
-            };
-
-            var mail = new MailMessage
-            {
-                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
-                Subject = $"Order Cancelled - {orderNumber}",
-                Body = $@"
+        public Task SendOrderCancellationEmail(string toEmail, string orderNumber) =>
+            SendAsync(toEmail, $"Order Cancelled - {orderNumber}", $@"
                     <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
                         <h2 style='color: #D0021B;'>Order Cancelled</h2>
                         <p>Hi,</p>
                         <p>Your order <strong>{orderNumber}</strong> has been successfully cancelled as per your request.</p>
                         <p style='color: #555;'>If you have already paid for this order, the refund process will be initiated shortly.</p>
                     </div>
-                ",
-                IsBodyHtml = true
-            };
+                ");
 
-            mail.To.Add(toEmail);
-            await client.SendMailAsync(mail);
-            client.Dispose();
-        }
-
-        public async Task SendPasswordResetEmail(string toEmail, string resetLink)
-        {
-            var smtp = _configuration.GetSection("Smtp");
-            var client = new SmtpClient(smtp["Host"])
-            {
-                Port = int.Parse(smtp["Port"]!),
-                Credentials = new NetworkCredential(smtp["Username"], smtp["Password"]),
-                EnableSsl = true,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                UseDefaultCredentials = false
-            };
-
-            var mail = new MailMessage
-            {
-                From = new MailAddress(smtp["FromEmail"]!, smtp["FromName"]),
-                Subject = "Reset Your Password",
-                Body = $@"
+        public Task SendPasswordResetEmail(string toEmail, string resetLink) =>
+            SendAsync(toEmail, "Reset Your Password", $@"
                     <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;'>
                         <h2 style='color: #4A90E2;'>Password Reset Request</h2>
                         <p>Hi,</p>
@@ -194,12 +96,54 @@ namespace Ecommerce_Backend.Services
                             <a href='{resetLink}' style='background-color: #4A90E2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Reset Password</a>
                         </p>
                         <p>If you did not request a password reset, please ignore this email. This link is valid for 1 hour.</p>
-                    </div>",
+                    </div>");
+
+        private async Task SendAsync(string toEmail, string subject, string htmlBody)
+        {
+            var smtp = _configuration.GetSection("Smtp");
+            var host = smtp["Host"];
+            var username = smtp["Username"];
+            var password = smtp["Password"]?.Replace(" ", "");
+            var fromEmail = smtp["FromEmail"];
+            var fromName = smtp["FromName"] ?? "Ecommerce App";
+
+            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(username) ||
+                string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(fromEmail))
+            {
+                throw new InvalidOperationException(
+                    "SMTP is not configured. Set Smtp:Host, Username, Password, and FromEmail in appsettings.Development.json.");
+            }
+
+            var port = int.Parse(smtp["Port"] ?? "587");
+            var enableSsl = bool.Parse(smtp["EnableSsl"] ?? "true");
+
+            using var client = new SmtpClient(host, port)
+            {
+                Credentials = new NetworkCredential(username, password),
+                EnableSsl = enableSsl,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                UseDefaultCredentials = false,
+                Timeout = 30000
+            };
+
+            using var mail = new MailMessage
+            {
+                From = new MailAddress(fromEmail, fromName),
+                Subject = subject,
+                Body = htmlBody,
                 IsBodyHtml = true
             };
             mail.To.Add(toEmail);
-            await client.SendMailAsync(mail);
-            client.Dispose();
+
+            try
+            {
+                await client.SendMailAsync(mail);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send email to {Email} via {Host}:{Port}", toEmail, host, port);
+                throw;
+            }
         }
     }
 }

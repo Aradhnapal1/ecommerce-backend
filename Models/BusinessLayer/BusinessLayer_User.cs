@@ -1,4 +1,5 @@
-﻿using Ecommerce_Backend.Models;
+﻿using Ecommerce_Backend.Helpers;
+using Ecommerce_Backend.Models;
 using Ecommerce_Backend.Models.DatabaseLayer;
 using Microsoft.AspNetCore.Mvc;
 
@@ -58,19 +59,35 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             {
                 return new BadRequestObjectResult(new { success = false, message = "Email is required." });
             }
-            return await _databaseLayer.ForgotPassword(model.Email);
+
+            return await _databaseLayer.ForgotPassword(model.Email.Trim().ToLowerInvariant());
         }
 
         public async Task<IActionResult> ResetPassword(ResetPasswordRequest model)
         {
-            if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.NewPassword))
+            if (string.IsNullOrWhiteSpace(model.Email) ||
+                string.IsNullOrWhiteSpace(model.Token) ||
+                string.IsNullOrWhiteSpace(model.NewPassword))
             {
-                return new BadRequestObjectResult(new { success = false, message = "Email, Token and new password are required." });
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Email, token and new password are required."
+                });
             }
-            if (model.NewPassword.Length < 6)
+
+            if (!UserContextHelper.IsStrongPassword(model.NewPassword))
             {
-                return new BadRequestObjectResult(new { success = false, message = "Password must be at least 6 characters long." });
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Password must be at least 8 characters long."
+                });
             }
+
+            model.Email = model.Email.Trim().ToLowerInvariant();
+            model.Token = model.Token.Trim();
+
             return await _databaseLayer.ResetPassword(model);
         }
 
@@ -80,9 +97,10 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             {
                 return new BadRequestObjectResult(new { success = false, message = "Old password and new password are required." });
             }
-            if (model.NewPassword.Length < 6)
+
+            if (!UserContextHelper.IsStrongPassword(model.NewPassword))
             {
-                return new BadRequestObjectResult(new { success = false, message = "New password must be at least 6 characters long." });
+                return new BadRequestObjectResult(new { success = false, message = "New password must be at least 8 characters long." });
             }
 
             return await _databaseLayer.ChangePassword(userId, model);

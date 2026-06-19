@@ -1,3 +1,4 @@
+using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using System;
@@ -10,7 +11,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         Task<IActionResult> AddProductReview(int userId, AddReviewRequest request);
         Task<IActionResult> GetProductReviews(int productId);
-        Task<IActionResult> DeleteProductReview(int reviewId);
+        Task<IActionResult> DeleteProductReview(int reviewId, int? userId, bool isAdmin);
     }
 
     public partial class DataBaseLayer
@@ -51,7 +52,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
 
@@ -89,53 +90,59 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         CreatedAt = reader.GetDateTime(5),
                         FirstName = reader.IsDBNull(6) ? null : reader.GetString(6),
                         LastName = reader.IsDBNull(7) ? null : reader.GetString(7),
-                        Email = reader.IsDBNull(8) ? null : reader.GetString(8),
+                        Email = null,
                         ProfileImageUrl = reader.IsDBNull(9) ? null : reader.GetString(9)
                     });
                 }
 
                 return new OkObjectResult(new { success = true, data = reviews });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(new Exception("Review operation failed"));
             }
         }
 
-        public async Task<IActionResult> DeleteProductReview(int reviewId)
+        public async Task<IActionResult> DeleteProductReview(int reviewId, int? userId, bool isAdmin)
         {
             try
             {
                 using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                // Find Product ID before deleting
                 int productId = 0;
-                var findQuery = "SELECT product_id FROM product_reviews WHERE id = @id";
+                int reviewOwnerId = 0;
+                var findQuery = "SELECT product_id, user_id FROM product_reviews WHERE id = @id";
                 using var findCmd = new NpgsqlCommand(findQuery, con);
                 findCmd.Parameters.AddWithValue("id", reviewId);
-                var result = await findCmd.ExecuteScalarAsync();
-
-                if (result == null)
+                using (var reader = await findCmd.ExecuteReaderAsync())
                 {
-                    return new NotFoundObjectResult(new { success = false, message = "Review not found." });
-                }
-                productId = Convert.ToInt32(result);
+                    if (!await reader.ReadAsync())
+                    {
+                        return new NotFoundObjectResult(new { success = false, message = "Review not found." });
+                    }
 
-                // Delete Review
+                    productId = reader.GetInt32(0);
+                    reviewOwnerId = reader.GetInt32(1);
+                }
+
+                if (!isAdmin && (!userId.HasValue || userId.Value != reviewOwnerId))
+                {
+                    return new ForbidResult();
+                }
+
                 var deleteQuery = "DELETE FROM product_reviews WHERE id = @id";
                 using var deleteCmd = new NpgsqlCommand(deleteQuery, con);
                 deleteCmd.Parameters.AddWithValue("id", reviewId);
                 await deleteCmd.ExecuteNonQueryAsync();
 
-                // Update Product average rating
                 await UpdateProductRatingStats(con, productId);
 
-                return new OkObjectResult(new { success = true, message = "Review deleted successfully by Admin." });
+                return new OkObjectResult(new { success = true, message = "Review deleted successfully." });
             }
             catch (Exception ex)
             {
-                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+                return ApiResponses.InternalError(ex);
             }
         }
 
