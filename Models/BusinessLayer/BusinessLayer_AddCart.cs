@@ -14,6 +14,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
 
         Task<IActionResult> DeleteCartItem(int id, int? userId, string? ipAddress);
         Task<IActionResult> ClearCart(int? userId, string? ipAddress);
+        Task MergeGuestCartToUser(int userId, string ipAddress);
 
 
 
@@ -58,5 +59,8 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         {
             return await _databaseLayer.ClearCart(userId, ipAddress);
         }
+
+        public Task MergeGuestCartToUser(int userId, string ipAddress) =>
+            _databaseLayer.MergeGuestCartToUser(userId, ipAddress);
     }
 }

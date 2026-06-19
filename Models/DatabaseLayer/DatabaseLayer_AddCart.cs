@@ -1,6 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Ecommerce_Backend.Helpers;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
-using System.Data.Common;
 
 namespace Ecommerce_Backend.Models.DatabaseLayer
 {
@@ -20,6 +20,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         );
         Task<IActionResult> DeleteCartItem(int id, int? userId, string? ipAddress);
         Task<IActionResult> ClearCart(int? userId, string? ipAddress);
+        Task MergeGuestCartToUser(int userId, string ipAddress);
 
     }
 
@@ -36,6 +37,32 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     );
 
                 await con.OpenAsync();
+
+                if (cart.UserId.HasValue &&
+                    !string.IsNullOrWhiteSpace(cart.IpAddress))
+                {
+                    await CartHelper.MergeGuestCartToUserAsync(
+                        con,
+                        cart.UserId.Value,
+                        cart.IpAddress);
+                }
+
+                cart.VariantId = await CartHelper.ResolveVariantIdAsync(
+                    con,
+                    cart.ProductId,
+                    cart.VariantId,
+                    cart.ColorId,
+                    cart.SizeId);
+
+                if (!cart.VariantId.HasValue &&
+                    (cart.ColorId.HasValue || cart.SizeId.HasValue))
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "No variant found for the selected color and size."
+                    });
+                }
 
                 // ====================================
                 // Variant -> Product Mapping
@@ -77,45 +104,6 @@ WHERE id = @variantid";
                         Convert.ToInt32(
                             productId
                         );
-                }
-
-                // ====================================
-                // Guest Cart -> User Cart Migration
-                // ====================================
-
-                if (cart.UserId.HasValue &&
-                    !string.IsNullOrWhiteSpace(
-                        cart.IpAddress
-                    ))
-                {
-                    string migrateQuery = @"
-UPDATE addcart
-SET
-    userid = @userid,
-    ipaddress = NULL,
-    updatedat = NOW()
-WHERE
-    userid IS NULL
-    AND ipaddress = @ipaddress";
-
-                    using var migrateCmd =
-                        new NpgsqlCommand(
-                            migrateQuery,
-                            con
-                        );
-
-                    migrateCmd.Parameters.AddWithValue(
-                        "@userid",
-                        cart.UserId.Value
-                    );
-
-                    migrateCmd.Parameters.AddWithValue(
-                        "@ipaddress",
-                        cart.IpAddress
-                    );
-
-                    await migrateCmd
-                        .ExecuteNonQueryAsync();
                 }
 
                 // ====================================
@@ -234,8 +222,13 @@ WHERE id = @id";
                         new
                         {
                             success = true,
-                            message =
-                                "Cart quantity updated"
+                            message = "Cart quantity updated",
+                            cartId,
+                            quantity = oldQty + cart.Quantity,
+                            productId = cart.ProductId,
+                            variantId = cart.VariantId,
+                            colorId = cart.ColorId,
+                            sizeId = cart.SizeId
                         });
                 }
 
@@ -315,10 +308,13 @@ RETURNING id";
                     new
                     {
                         success = true,
-                        message =
-                            "Item added to cart",
-                        cartId =
-                            cartIdInserted
+                        message = "Item added to cart",
+                        cartId = cartIdInserted,
+                        productId = cart.ProductId,
+                        variantId = cart.VariantId,
+                        colorId = cart.ColorId,
+                        sizeId = cart.SizeId,
+                        quantity = cart.Quantity
                     });
             }
             catch (Exception ex)
@@ -350,70 +346,34 @@ RETURNING id";
 
                 string query = @"
 SELECT
-
     ac.id,
     ac.productid,
     ac.variantid,
     ac.quantity,
-
     p.productname,
-    p.slug,
-
-    COALESCE(
-        pv.mrp,
-        p.mrp
-    ) AS mrp,
-
-    COALESCE(
-        pv.saleprice,
-        p.saleprice
-    ) AS saleprice,
-
-    COALESCE(
-        pv.variantimageurl,
-        p.productimageurl
-    ) AS imageurl,
-
+    p.slug AS product_slug,
+    COALESCE(pv.mrp, p.mrp) AS mrp,
+    COALESCE(pv.saleprice, p.saleprice) AS saleprice,
+    COALESCE(pv.variantimageurl, p.productimageurl) AS imageurl,
     c.id AS colorid,
     c.color_name,
     c.color_code,
-
+    c.slug AS color_slug,
     s.id AS sizeid,
     s.size_name,
-
-    (
-        ac.quantity
-        *
-        COALESCE(
-            pv.saleprice,
-            p.saleprice
-        )
-    ) AS totalprice
-
+    s.slug AS size_slug,
+    (ac.quantity * COALESCE(pv.saleprice, p.saleprice)) AS totalprice
 FROM addcart ac
-
-INNER JOIN products p
-ON p.id = ac.productid
-
-LEFT JOIN product_variants pv
-ON pv.id = ac.variantid
-
-LEFT JOIN colors c
-ON c.id = CAST(
-    COALESCE(
-        pv.color,
-        p.color
-    ) AS INTEGER
-)
-
-LEFT JOIN sizes s
-ON s.id = CAST(
-    COALESCE(
-        pv.sizes[1],
-        p.sizes[1]
-    ) AS INTEGER
-)
-
+INNER JOIN products p ON p.id = ac.productid
+LEFT JOIN product_variants pv ON pv.id = ac.variantid
+LEFT JOIN colors c ON c.id = CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER)
+LEFT JOIN LATERAL (
+    SELECT sz.id, sz.size_name, sz.slug
+    FROM sizes sz
+    WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
+    ORDER BY sz.id
+    LIMIT 1
+) s ON TRUE
 WHERE ";
 
                 if (userId.HasValue)
@@ -422,7 +382,7 @@ WHERE ";
                 }
                 else
                 {
-                    query += " ac.ipaddress = @ipaddress ";
+                    query += " ac.userid IS NULL AND ac.ipaddress = @ipaddress ";
                 }
 
                 query += " ORDER BY ac.createdat DESC ";
@@ -464,84 +424,39 @@ WHERE ";
 
                     cartItems.Add(new
                     {
-                        CartId =
-        Convert.ToInt32(
-            reader["id"]
-        ),
-
-                        ProductId =
-        Convert.ToInt32(
-            reader["productid"]
-        ),
-
-                        VariantId =
-        reader["variantid"] == DBNull.Value
-        ? (int?)null
-        : Convert.ToInt32(
-            reader["variantid"]
-        ),
-
-                        ProductName =
-        reader["productname"]
-        ?.ToString(),
-
-                        Slug =
-        reader["slug"]
-        ?.ToString(),
-
-                        Quantity =
-        Convert.ToInt32(
-            reader["quantity"]
-        ),
-
-                        MRP =
-        Convert.ToDecimal(
-            reader["mrp"]
-        ),
-
-                        SalePrice =
-        Convert.ToDecimal(
-            reader["saleprice"]
-        ),
-
-                        TotalPrice =
-        itemTotal,
-
-                        ImageUrl =
-        reader["imageurl"]
-        ?.ToString(),
-
-                        ColorId =
-        reader["colorid"] == DBNull.Value
-        ? (int?)null
-        : Convert.ToInt32(
-            reader["colorid"]
-        ),
-
-                        ColorName =
-        reader["color_name"] == DBNull.Value
-        ? null
-        : reader["color_name"]
-        .ToString(),
-
-                        ColorCode =
-        reader["color_code"] == DBNull.Value
-        ? null
-        : reader["color_code"]
-        .ToString(),
-
-                        SizeId =
-        reader["sizeid"] == DBNull.Value
-        ? (int?)null
-        : Convert.ToInt32(
-            reader["sizeid"]
-        ),
-
-                        SizeName =
-        reader["size_name"] == DBNull.Value
-        ? null
-        : reader["size_name"]
-        .ToString()
+                        CartId = Convert.ToInt32(reader["id"]),
+                        ProductId = Convert.ToInt32(reader["productid"]),
+                        VariantId = reader["variantid"] == DBNull.Value
+                            ? (int?)null
+                            : Convert.ToInt32(reader["variantid"]),
+                        ProductName = reader["productname"]?.ToString(),
+                        Slug = reader["product_slug"]?.ToString(),
+                        Quantity = Convert.ToInt32(reader["quantity"]),
+                        MRP = Convert.ToDecimal(reader["mrp"]),
+                        SalePrice = Convert.ToDecimal(reader["saleprice"]),
+                        TotalPrice = itemTotal,
+                        ImageUrl = reader["imageurl"]?.ToString(),
+                        ColorId = reader["colorid"] == DBNull.Value
+                            ? (int?)null
+                            : Convert.ToInt32(reader["colorid"]),
+                        ColorName = reader["color_name"] == DBNull.Value
+                            ? null
+                            : reader["color_name"].ToString(),
+                        ColorCode = reader["color_code"] == DBNull.Value
+                            ? null
+                            : reader["color_code"].ToString(),
+                        ColorSlug = reader["color_slug"] == DBNull.Value
+                            ? null
+                            : reader["color_slug"].ToString(),
+                        SizeId = reader["sizeid"] == DBNull.Value
+                            ? (int?)null
+                            : Convert.ToInt32(reader["sizeid"]),
+                        SizeName = reader["size_name"] == DBNull.Value
+                            ? null
+                            : reader["size_name"].ToString(),
+                        SizeSlug = reader["size_slug"] == DBNull.Value
+                            ? null
+                            : reader["size_slug"].ToString()
                     });
                 }
 
@@ -866,6 +781,13 @@ WHERE ipaddress = @ipaddress";
         }
 
 
+
+        public async Task MergeGuestCartToUser(int userId, string ipAddress)
+        {
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+            await CartHelper.MergeGuestCartToUserAsync(con, userId, ipAddress);
+        }
 
     }
 }

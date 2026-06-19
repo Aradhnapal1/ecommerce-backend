@@ -73,6 +73,10 @@ namespace Ecommerce_Backend.Controllers
             if (user == null)
                 return Unauthorized(new { message = "Invalid credentials or account not verified" });
 
+            var ipAddress = UserContextHelper.GetClientIp(HttpContext);
+            if (!string.IsNullOrWhiteSpace(ipAddress))
+                await _businessLayer.MergeGuestCartToUser(user.id, ipAddress);
+
             string token = _jwtService.GenerateToken(user);
 
             return Ok(new

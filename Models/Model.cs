@@ -1,4 +1,4 @@
-﻿﻿﻿﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 namespace Ecommerce_Backend.Models
 
 {
@@ -443,6 +443,10 @@ namespace Ecommerce_Backend.Models
         public int ProductId { get; set; }
 
         public int? VariantId { get; set; }
+
+        public int? ColorId { get; set; }
+
+        public int? SizeId { get; set; }
 
         public int Quantity { get; set; } = 1;
 
