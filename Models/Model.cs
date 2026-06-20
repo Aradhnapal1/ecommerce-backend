@@ -208,6 +208,9 @@ namespace Ecommerce_Backend.Models
         public List<string>? SizeNames { get; set; }
         public List<string>? SizeSlugs { get; set; }
 
+        public decimal AverageRating { get; set; }
+        public int TotalReviews { get; set; }
+
         public bool IsActive { get; set; }
 
         public DateTime CreatedAt { get; set; }
@@ -330,6 +333,20 @@ namespace Ecommerce_Backend.Models
     public class ProductSearchRequest : ProductFilterRequest
     {
         public new string Q { get; set; } = string.Empty;
+    }
+
+    public class ProductReviewSummary
+    {
+        public decimal AverageRating { get; set; }
+        public int TotalReviews { get; set; }
+    }
+
+    public class ProductDetailModel
+    {
+        public ProductModel Product { get; set; } = new();
+        public List<ProductVariantModel> Variants { get; set; } = new();
+        public ProductReviewSummary Reviews { get; set; } = new();
+        public List<ProductModel> RelatedProducts { get; set; } = new();
     }
 
     public class BannerModel

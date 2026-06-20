@@ -11,11 +11,8 @@ namespace Ecommerce_Backend.Controllers
     [Route("api/product")]
     public class ProductController : ControllerBase
     {
-
         private readonly IBusinessLayer _businessLayer;
         private readonly CloudinaryService _cloudinary;
-
-
 
         public ProductController(IBusinessLayer businessLayer, CloudinaryService cloudinary)
         {
@@ -32,19 +29,12 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.GetAllProducts();
         }
 
-        /// <summary>
-        /// Filter products by category, brand, color, size, price, discount, search, sort.
-        /// </summary>
         [HttpGet("filter")]
         public async Task<IActionResult> FilterProducts([FromQuery] ProductFilterRequest filter)
         {
             return await _businessLayer.GetFilteredProducts(filter);
         }
 
-        /// <summary>
-        /// Global product search — name, SKU, slug, description, brand, category, color.
-        /// Combine with multi-select filters: categorySlugs, brandSlugs, colorSlugs, sizeSlugs (or legacy *Ids).
-        /// </summary>
         [HttpGet("search")]
         public async Task<IActionResult> SearchProducts(
             [FromQuery] string q,
@@ -59,33 +49,77 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.GetTopDiscountedProducts();
         }
 
-        [HttpPost("addproduct")]
-        [Authorize(Roles = AuthRoles.Admin)]
-        public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
+        /// <summary>Products by category slug (supports pagination &amp; filters).</summary>
+        [HttpGet("category/{categorySlug}")]
+        public async Task<IActionResult> GetByCategorySlug(
+            string categorySlug,
+            [FromQuery] ProductFilterRequest? filter)
         {
-            var result = await _businessLayer.AddProduct(product);
-            return Ok(result);
+            return await _businessLayer.GetProductsByCategorySlug(categorySlug, filter);
         }
 
-        [HttpPut("updateproduct/{id}")]
-        [Authorize(Roles = AuthRoles.Admin)]
-        public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
+        /// <summary>Products by brand slug (supports pagination &amp; filters).</summary>
+        [HttpGet("brand/{brandSlug}")]
+        public async Task<IActionResult> GetByBrandSlug(
+            string brandSlug,
+            [FromQuery] ProductFilterRequest? filter)
         {
-            var result = await _businessLayer.UpdateProduct(id, product);
-            return Ok(result);
+            return await _businessLayer.GetProductsByBrandSlug(brandSlug, filter);
         }
 
-
-        [HttpDelete("deleteproduct/{id}")]
-        [Authorize(Roles = AuthRoles.Admin)]
-        public async Task<IActionResult> DeleteProduct(int id)
+        /// <summary>Single product by URL slug.</summary>
+        [HttpGet("by-slug/{slug}")]
+        public async Task<IActionResult> GetProductBySlug(string slug)
         {
-            var result = await _businessLayer.DeleteProduct(id);
-            return Ok(result);
+            var result = await _businessLayer.GetProductBySlug(slug);
+            if (result == null)
+            {
+                return NotFound(new { success = false, message = "Product not found" });
+            }
+
+            return Ok(new { success = true, data = result });
         }
 
+        /// <summary>Full product page: product + variants + reviews summary + related products.</summary>
+        [HttpGet("detail/slug/{slug}")]
+        public async Task<IActionResult> GetProductDetailBySlug(string slug)
+        {
+            var detail = await _businessLayer.GetProductDetail(null, slug);
+            if (detail == null)
+            {
+                return NotFound(new { success = false, message = "Product not found" });
+            }
 
-        [HttpGet("getproductbyid/{id}")]
+            return Ok(new { success = true, data = detail });
+        }
+
+        [HttpGet("detail/{id:int}")]
+        public async Task<IActionResult> GetProductDetailById(int id)
+        {
+            var detail = await _businessLayer.GetProductDetail(id, null);
+            if (detail == null)
+            {
+                return NotFound(new { success = false, message = "Product not found" });
+            }
+
+            return Ok(new { success = true, data = detail });
+        }
+
+        /// <summary>Similar products (same category / brand).</summary>
+        [HttpGet("{id:int}/related")]
+        public async Task<IActionResult> GetRelatedProducts(int id, [FromQuery] int limit = 8)
+        {
+            return await _businessLayer.GetRelatedProducts(id, limit);
+        }
+
+        /// <summary>All active variants for a product (color, size, stock, price).</summary>
+        [HttpGet("{productId:int}/variants")]
+        public async Task<IActionResult> GetProductVariants(int productId)
+        {
+            return await _businessLayer.GetProductVariants(productId);
+        }
+
+        [HttpGet("getproductbyid/{id:int}")]
         public async Task<IActionResult> GetProductById(int id)
         {
             var result = await _businessLayer.GetProductById(id);
@@ -104,6 +138,30 @@ namespace Ecommerce_Backend.Controllers
                 status = true,
                 data = result
             });
+        }
+
+        [HttpPost("addproduct")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> AddProduct([FromForm] ProductModel product)
+        {
+            var result = await _businessLayer.AddProduct(product);
+            return Ok(result);
+        }
+
+        [HttpPut("updateproduct/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product)
+        {
+            var result = await _businessLayer.UpdateProduct(id, product);
+            return Ok(result);
+        }
+
+        [HttpDelete("deleteproduct/{id}")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> DeleteProduct(int id)
+        {
+            var result = await _businessLayer.DeleteProduct(id);
+            return Ok(result);
         }
     }
 }

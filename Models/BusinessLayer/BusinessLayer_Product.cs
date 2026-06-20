@@ -12,6 +12,12 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
         Task<ProductModel?> GetProductById(int id);
+        Task<ProductModel?> GetProductBySlug(string slug);
+        Task<ProductDetailModel?> GetProductDetail(int? id, string? slug);
+        Task<IActionResult> GetRelatedProducts(int productId, int limit);
+        Task<IActionResult> GetProductsByCategorySlug(string categorySlug, ProductFilterRequest? filter);
+        Task<IActionResult> GetProductsByBrandSlug(string brandSlug, ProductFilterRequest? filter);
+        Task<IActionResult> GetProductVariants(int productId);
         Task<IActionResult> GetTopDiscountedProducts();
     }
 
@@ -113,6 +119,91 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         public async Task<ProductModel?> GetProductById(int id)
         {
             return await _databaseLayer.GetProductById(id);
+        }
+
+        public async Task<ProductModel?> GetProductBySlug(string slug)
+        {
+            return await _databaseLayer.GetProductBySlug(slug);
+        }
+
+        public async Task<ProductDetailModel?> GetProductDetail(int? id, string? slug)
+        {
+            return await _databaseLayer.GetProductDetail(id, slug);
+        }
+
+        public async Task<IActionResult> GetRelatedProducts(int productId, int limit)
+        {
+            if (productId <= 0)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Invalid product ID"
+                });
+            }
+
+            if (limit < 1) limit = 8;
+            if (limit > 24) limit = 24;
+
+            var products = await _databaseLayer.GetRelatedProducts(productId, limit);
+            return new OkObjectResult(new
+            {
+                success = true,
+                count = products.Count,
+                data = products
+            });
+        }
+
+        public async Task<IActionResult> GetProductsByCategorySlug(string categorySlug, ProductFilterRequest? filter)
+        {
+            if (string.IsNullOrWhiteSpace(categorySlug))
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Category slug is required"
+                });
+            }
+
+            filter ??= new ProductFilterRequest();
+            filter.CategorySlug = categorySlug.Trim();
+            return await GetFilteredProducts(filter);
+        }
+
+        public async Task<IActionResult> GetProductsByBrandSlug(string brandSlug, ProductFilterRequest? filter)
+        {
+            if (string.IsNullOrWhiteSpace(brandSlug))
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Brand slug is required"
+                });
+            }
+
+            filter ??= new ProductFilterRequest();
+            filter.BrandSlug = brandSlug.Trim();
+            return await GetFilteredProducts(filter);
+        }
+
+        public async Task<IActionResult> GetProductVariants(int productId)
+        {
+            if (productId <= 0)
+            {
+                return new BadRequestObjectResult(new
+                {
+                    success = false,
+                    message = "Invalid product ID"
+                });
+            }
+
+            var variants = await _databaseLayer.GetVariantsByProductId(productId);
+            return new OkObjectResult(new
+            {
+                success = true,
+                count = variants.Count,
+                data = variants
+            });
         }
     }
 }

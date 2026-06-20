@@ -112,6 +112,24 @@ namespace Ecommerce_Backend.Controllers
 
 
 
+        [HttpGet("by-product/{productId:int}")]
+        public async Task<IActionResult> GetVariantsByProduct(int productId)
+        {
+            return await _businessLayer.GetProductVariants(productId);
+        }
+
+        [HttpGet("by-slug/{slug}")]
+        public async Task<IActionResult> GetVariantBySlug(string slug)
+        {
+            var variant = await _businessLayer.GetVariantBySlug(slug);
+            if (variant == null)
+            {
+                return NotFound(new { success = false, message = "Variant not found" });
+            }
+
+            return Ok(new { success = true, data = variant });
+        }
+
         [HttpGet("getvariantbyid/{id}")]
         public async Task<IActionResult> GetVariantById(int id)
         {

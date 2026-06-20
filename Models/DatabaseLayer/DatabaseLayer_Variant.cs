@@ -12,6 +12,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<object> AddVariant([FromForm] ProductVariantModel variant);
         Task<object> UpdateVariant(int id, ProductVariantModel variant);
         Task<object> DeleteVariant(int id);
+        Task<List<ProductVariantModel>> GetVariantsByProductId(int productId);
+        Task<ProductVariantModel?> GetVariantBySlug(string slug);
         Task<object> GetVariantById(int id);
     }
     public partial class DataBaseLayer : IDatabaseLayer
@@ -679,6 +681,122 @@ WHERE id = @Id";
             };
 
             return variant;
+        }
+
+        public async Task<List<ProductVariantModel>> GetVariantsByProductId(int productId)
+        {
+            var variants = new List<ProductVariantModel>();
+
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            const string query = """
+                SELECT
+                    pv.*,
+                    c.color_name,
+                    (
+                        SELECT ARRAY_AGG(s.size_name ORDER BY s.id)
+                        FROM sizes s
+                        WHERE s.id = ANY(pv.sizes)
+                    ) AS size_names
+                FROM product_variants pv
+                LEFT JOIN colors c ON c.id = pv.color::int
+                WHERE pv.productid = @productId AND pv.isactive = TRUE
+                ORDER BY pv.id ASC
+                """;
+
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("productId", productId);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+                variants.Add(MapVariantFromReader(reader));
+
+            return variants;
+        }
+
+        public async Task<ProductVariantModel?> GetVariantBySlug(string slug)
+        {
+            if (string.IsNullOrWhiteSpace(slug))
+                return null;
+
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            const string query = """
+                SELECT
+                    pv.*,
+                    c.color_name,
+                    (
+                        SELECT ARRAY_AGG(s.size_name ORDER BY s.id)
+                        FROM sizes s
+                        WHERE s.id = ANY(pv.sizes)
+                    ) AS size_names
+                FROM product_variants pv
+                LEFT JOIN colors c ON c.id = pv.color::int
+                WHERE LOWER(pv.slug) = LOWER(@slug) AND pv.isactive = TRUE
+                LIMIT 1
+                """;
+
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("slug", slug.Trim());
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync())
+                return null;
+
+            return MapVariantFromReader(reader);
+        }
+
+        private static ProductVariantModel MapVariantFromReader(NpgsqlDataReader reader)
+        {
+            return new ProductVariantModel
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("id")),
+                ProductId = reader.GetInt32(reader.GetOrdinal("productid")),
+                VariantName = reader["variantname"]?.ToString(),
+                Slug = reader["slug"]?.ToString(),
+                SKU = reader["sku"]?.ToString(),
+                Sizes = reader.IsDBNull(reader.GetOrdinal("sizes"))
+                    ? Array.Empty<int>()
+                    : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes")),
+                Color = reader["color"]?.ToString(),
+                ColorName = reader.IsDBNull(reader.GetOrdinal("color_name"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("color_name")),
+                MRP = reader.IsDBNull(reader.GetOrdinal("mrp"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("mrp")),
+                DiscountPercent = reader.IsDBNull(reader.GetOrdinal("discountpercent"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("discountpercent")),
+                BasePrice = reader.IsDBNull(reader.GetOrdinal("baseprice"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("baseprice")),
+                SalePrice = reader.IsDBNull(reader.GetOrdinal("saleprice"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("saleprice")),
+                GST = reader.IsDBNull(reader.GetOrdinal("gst"))
+                    ? 0
+                    : reader.GetDecimal(reader.GetOrdinal("gst")),
+                Stock = reader.IsDBNull(reader.GetOrdinal("stock"))
+                    ? 0
+                    : reader.GetInt32(reader.GetOrdinal("stock")),
+                VariantImageUrl = reader["variantimageurl"]?.ToString(),
+                GalleryImages = reader.IsDBNull(reader.GetOrdinal("galleryimages"))
+                    ? Array.Empty<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("galleryimages")),
+                IsActive = reader.GetBoolean(reader.GetOrdinal("isactive")),
+                CreatedAt = reader.IsDBNull(reader.GetOrdinal("createdat"))
+                    ? DateTime.MinValue
+                    : reader.GetDateTime(reader.GetOrdinal("createdat")),
+                UpdatedAt = reader.IsDBNull(reader.GetOrdinal("updatedat"))
+                    ? DateTime.MinValue
+                    : reader.GetDateTime(reader.GetOrdinal("updatedat")),
+                SizeNames = reader.IsDBNull(reader.GetOrdinal("size_names"))
+                    ? new List<string>()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList()
+            };
         }
 
 

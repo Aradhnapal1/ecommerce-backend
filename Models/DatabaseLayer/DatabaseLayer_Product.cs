@@ -1,4 +1,4 @@
-﻿﻿using CloudinaryDotNet;
+﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +15,9 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         Task<IActionResult> UpdateProduct(int id, [FromForm] ProductModel product);
         Task<IActionResult> DeleteProduct(int id);
         Task<ProductModel?> GetProductById(int id);
+        Task<ProductModel?> GetProductBySlug(string slug);
+        Task<List<ProductModel>> GetRelatedProducts(int productId, int limit);
+        Task<ProductDetailModel?> GetProductDetail(int? id, string? slug);
         Task<List<ProductModel>> GetTopDiscountedProducts(int limit);
     }
 
@@ -37,7 +40,17 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         SELECT ARRAY_AGG(s.slug ORDER BY s.id)
         FROM sizes s
         WHERE s.id = ANY(COALESCE(p.sizes, ARRAY[]::int[]))
-    ) AS size_slugs";
+    ) AS size_slugs,
+    COALESCE((
+        SELECT AVG(rating)::numeric(10,2)
+        FROM product_reviews pr
+        WHERE pr.product_id = p.id
+    ), 0) AS average_rating,
+    COALESCE((
+        SELECT COUNT(*)::int
+        FROM product_reviews pr
+        WHERE pr.product_id = p.id
+    ), 0) AS total_reviews";
 
         private const string ProductJoins = @"
 FROM products p
@@ -357,7 +370,13 @@ LIMIT @limit;
                     : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_names")).ToList(),
                 SizeSlugs = reader.IsDBNull(reader.GetOrdinal("size_slugs"))
                     ? new List<string>()
-                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_slugs")).ToList()
+                    : reader.GetFieldValue<string[]>(reader.GetOrdinal("size_slugs")).ToList(),
+                AverageRating = reader.IsDBNull(reader.GetOrdinal("average_rating"))
+                    ? 0
+                    : Convert.ToDecimal(reader["average_rating"]),
+                TotalReviews = reader.IsDBNull(reader.GetOrdinal("total_reviews"))
+                    ? 0
+                    : Convert.ToInt32(reader["total_reviews"])
             };
         }
 
@@ -921,6 +940,126 @@ WHERE p.id = @id;
                 return null;
 
             return MapProduct(reader);
+        }
+
+        public async Task<ProductModel?> GetProductBySlug(string slug)
+        {
+            if (string.IsNullOrWhiteSpace(slug))
+                return null;
+
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            var query = $@"
+SELECT
+{ProductSelectColumns}
+{ProductJoins}
+WHERE LOWER(p.slug) = LOWER(@slug) AND p.isactive = true
+LIMIT 1;
+";
+
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("slug", slug.Trim());
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return null;
+
+            return MapProduct(reader);
+        }
+
+        public async Task<List<ProductModel>> GetRelatedProducts(int productId, int limit)
+        {
+            var products = new List<ProductModel>();
+            if (limit < 1) limit = 8;
+            if (limit > 24) limit = 24;
+
+            using var con = new NpgsqlConnection(DbConnection);
+            await con.OpenAsync();
+
+            const string contextQuery = """
+                SELECT categoryid, brandid
+                FROM products
+                WHERE id = @productId AND isactive = true
+                LIMIT 1
+                """;
+
+            int? categoryId = null;
+            int? brandId = null;
+
+            await using (var contextCmd = new NpgsqlCommand(contextQuery, con))
+            {
+                contextCmd.Parameters.AddWithValue("productId", productId);
+                await using var contextReader = await contextCmd.ExecuteReaderAsync();
+                if (!await contextReader.ReadAsync())
+                    return products;
+
+                categoryId = contextReader["categoryid"] == DBNull.Value
+                    ? null
+                    : Convert.ToInt32(contextReader["categoryid"]);
+                brandId = contextReader["brandid"] == DBNull.Value
+                    ? null
+                    : Convert.ToInt32(contextReader["brandid"]);
+            }
+
+            var query = $@"
+SELECT
+{ProductSelectColumns}
+{ProductJoins}
+WHERE p.isactive = true
+  AND p.id <> @productId
+  AND (
+        (@categoryId IS NOT NULL AND p.categoryid = @categoryId)
+        OR (@brandId IS NOT NULL AND p.brandid = @brandId)
+      )
+ORDER BY
+  CASE
+    WHEN @categoryId IS NOT NULL AND p.categoryid = @categoryId
+         AND @brandId IS NOT NULL AND p.brandid = @brandId THEN 0
+    WHEN @categoryId IS NOT NULL AND p.categoryid = @categoryId THEN 1
+    ELSE 2
+  END,
+  p.discountprice DESC NULLS LAST,
+  p.createdat DESC
+LIMIT @limit;
+";
+
+            using var cmd = new NpgsqlCommand(query, con);
+            cmd.Parameters.AddWithValue("productId", productId);
+            cmd.Parameters.AddWithValue("categoryId", (object?)categoryId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("brandId", (object?)brandId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                products.Add(MapProduct(reader));
+
+            return products;
+        }
+
+        public async Task<ProductDetailModel?> GetProductDetail(int? id, string? slug)
+        {
+            ProductModel? product = id.HasValue
+                ? await GetProductById(id.Value)
+                : await GetProductBySlug(slug ?? string.Empty);
+
+            if (product == null || !product.IsActive)
+                return null;
+
+            var variants = await GetVariantsByProductId(product.Id);
+            var related = await GetRelatedProducts(product.Id, 8);
+
+            return new ProductDetailModel
+            {
+                Product = product,
+                Variants = variants,
+                Reviews = new ProductReviewSummary
+                {
+                    AverageRating = product.AverageRating,
+                    TotalReviews = product.TotalReviews
+                },
+                RelatedProducts = related
+            };
         }
     }
 }
