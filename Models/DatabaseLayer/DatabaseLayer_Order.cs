@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Ecommerce_Backend.Helpers;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using NpgsqlTypes;
 using System;
@@ -233,6 +234,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     decimal finalAmount = subtotal - discountAmount;
 
                     string paymentStatus = "PENDING";
+                    var paymentMethod = PaymentHelper.NormalizePaymentMethod(model.PaymentMethod);
+                    bool isOnline = PaymentHelper.IsOnlinePayment(model.PaymentMethod);
 
                     // Step 5: Create Order
                     string orderNumber = "ORD" + DateTime.Now.Ticks;
@@ -267,7 +270,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         createOrderCmd.Parameters.AddWithValue("@State", address.State ?? (object)DBNull.Value);
                         createOrderCmd.Parameters.AddWithValue("@Country", address.Country ?? (object)DBNull.Value);
                         createOrderCmd.Parameters.AddWithValue("@Pincode", address.Pincode ?? (object)DBNull.Value);
-                        createOrderCmd.Parameters.AddWithValue("@PaymentMethod", model.PaymentMethod);
+                        createOrderCmd.Parameters.AddWithValue("@PaymentMethod", paymentMethod);
                         createOrderCmd.Parameters.AddWithValue("@PaymentStatus", paymentStatus);
                         createOrderCmd.Parameters.AddWithValue("@Subtotal", subtotal);
                         createOrderCmd.Parameters.AddWithValue("@DiscountAmount", discountAmount);
@@ -309,25 +312,25 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             await itemCmd.ExecuteNonQueryAsync();
                         }
 
-                        // Step 8: Stock Deduct
-                        string deductStockQuery;
-                        if (item.VariantId > 0)
+                        if (!isOnline)
                         {
-                            deductStockQuery = @"
+                            string deductStockQuery;
+                            if (item.VariantId > 0)
+                            {
+                                deductStockQuery = @"
                                 UPDATE product_variants 
                                 SET stock = stock - @Quantity 
                                 WHERE id = @VariantId AND stock >= @Quantity";
-                        }
-                        else
-                        {
-                            deductStockQuery = @"
+                            }
+                            else
+                            {
+                                deductStockQuery = @"
                                 UPDATE products 
                                 SET stock = stock - @Quantity 
                                 WHERE id = @ProductId AND stock >= @Quantity";
-                        }
+                            }
 
-                        using (var deductCmd = new NpgsqlCommand(deductStockQuery, con))
-                        {
+                            using var deductCmd = new NpgsqlCommand(deductStockQuery, con);
                             deductCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
                             if (item.VariantId > 0)
                                 deductCmd.Parameters.AddWithValue("@VariantId", item.VariantId);
@@ -348,8 +351,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         }
                     }
 
-                    // Step 7: Coupon Usage (mark coupon as used)
-                    if (couponId.HasValue)
+                    if (!isOnline && couponId.HasValue)
                     {
                         var couponUsageQuery = @"
                             INSERT INTO coupon_usage 
@@ -368,23 +370,22 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         }
                     }
 
-                    // Step 9: Clear Cart
-                    var clearCartQuery = "DELETE FROM addcart WHERE userid = @UserId";
-                    using (var clearCmd = new NpgsqlCommand(clearCartQuery, con))
+                    if (!isOnline)
                     {
+                        var clearCartQuery = "DELETE FROM addcart WHERE userid = @UserId";
+                        using var clearCmd = new NpgsqlCommand(clearCartQuery, con);
                         clearCmd.Parameters.AddWithValue("@UserId", userId);
                         clearCmd.Transaction = transaction;
-
                         await clearCmd.ExecuteNonQueryAsync();
                     }
 
                     // Commit Transaction
                     await transaction.CommitAsync();
 
-                    var isOnline = model.PaymentMethod.Trim().ToUpperInvariant() == "ONLINE";
                     object? razorpay = null;
+                    string? paymentError = null;
                     if (isOnline)
-                        razorpay = await TryCreateRazorpayCheckoutAsync(con, orderId, orderNumber, finalAmount);
+                        (razorpay, paymentError) = await CreateRazorpayCheckoutAsync(con, orderId, finalAmount);
                     else
                         await TrySendOrderInvoiceAsync(con, orderId, userId, "PENDING");
 
@@ -392,16 +393,19 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     {
                         success = true,
                         message = isOnline
-                            ? "Order created. Complete payment to confirm."
+                            ? (razorpay != null
+                                ? "Order created. Complete payment to confirm."
+                                : "Order created but payment could not be started.")
                             : "Order created successfully",
                         data = new
                         {
                             orderId = orderId,
                             orderNumber = orderNumber,
                             finalAmount = finalAmount,
-                            paymentMethod = model.PaymentMethod,
+                            paymentMethod = paymentMethod,
                             paymentStatus = paymentStatus,
-                            razorpay
+                            razorpay,
+                            paymentError
                         }
                     });
                 }

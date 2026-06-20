@@ -10,6 +10,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     {
         Task<IActionResult> BuyNow(BuyNowModel model, int userId);
         Task<IActionResult> VerifyOnlinePayment(VerifyPaymentModel model, int userId);
+        Task<IActionResult> InitiateOnlinePayment(int orderId, int userId);
     }
 
     public partial class DataBaseLayer : IDatabaseLayer
@@ -77,8 +78,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     }
 
                     decimal finalAmount = subtotal - discountAmount;
-                    var paymentMethod = model.PaymentMethod.Trim().ToUpperInvariant();
-                    bool isOnline = paymentMethod == "ONLINE";
+                    var paymentMethod = PaymentHelper.NormalizePaymentMethod(model.PaymentMethod);
+                    bool isOnline = PaymentHelper.IsOnlinePayment(model.PaymentMethod);
 
                     var orderNumber = "ORD" + DateTime.Now.Ticks;
                     int orderId = await InsertOrderAsync(
@@ -86,24 +87,29 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         "PENDING", subtotal, discountAmount, couponId, couponCode, finalAmount);
 
                     await InsertOrderItemAsync(con, transaction, orderId, lineItem);
-                    await DeductStockAsync(con, transaction, lineItem);
-                    if (couponId.HasValue)
-                        await InsertCouponUsageAsync(con, transaction, couponId.Value, userId, orderId);
+                    if (!isOnline)
+                    {
+                        await DeductStockAsync(con, transaction, lineItem);
+                        if (couponId.HasValue)
+                            await InsertCouponUsageAsync(con, transaction, couponId.Value, userId, orderId);
+                    }
 
                     await transaction.CommitAsync();
 
                     object? razorpay = null;
+                    string? paymentError = null;
                     if (isOnline)
-                        razorpay = await TryCreateRazorpayCheckoutAsync(con, orderId, orderNumber, finalAmount);
-
-                    if (!isOnline)
+                        (razorpay, paymentError) = await CreateRazorpayCheckoutAsync(con, orderId, finalAmount);
+                    else
                         await TrySendOrderInvoiceAsync(con, orderId, userId, "PENDING");
 
                     return new OkObjectResult(new
                     {
                         success = true,
                         message = isOnline
-                            ? "Order created. Complete payment to confirm."
+                            ? (razorpay != null
+                                ? "Order created. Complete payment to confirm."
+                                : "Order created but payment could not be started.")
                             : "Order placed successfully.",
                         data = new
                         {
@@ -112,7 +118,8 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             finalAmount,
                             paymentMethod,
                             paymentStatus = "PENDING",
-                            razorpay
+                            razorpay,
+                            paymentError
                         }
                     });
                 }
@@ -175,24 +182,47 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 if (!_razorpayService.VerifyPaymentSignature(
                         model.RazorpayOrderId, model.RazorpayPaymentId, model.RazorpaySignature))
                 {
-                    return new BadRequestObjectResult(new { success = false, message = "Payment verification failed." });
+                    return new BadRequestObjectResult(new { success = false, message = "Payment verification failed. Invalid signature." });
                 }
 
-                const string updateQuery = """
-                    UPDATE orders
-                    SET payment_status = 'SUCCESS',
-                        razorpay_payment_id = @paymentid,
-                        razorpay_signature = @signature,
-                        updatedat = NOW()
-                    WHERE id = @orderid AND userid = @userid
-                    """;
+                await using var transaction = await con.BeginTransactionAsync();
+                try
+                {
+                    const string updateQuery = """
+                        UPDATE orders
+                        SET payment_status = 'SUCCESS',
+                            razorpay_payment_id = @paymentid,
+                            razorpay_signature = @signature,
+                            updatedat = NOW()
+                        WHERE id = @orderid AND userid = @userid AND payment_status = 'PENDING'
+                        """;
 
-                await using var updateCmd = new NpgsqlCommand(updateQuery, con);
-                updateCmd.Parameters.AddWithValue("@paymentid", model.RazorpayPaymentId);
-                updateCmd.Parameters.AddWithValue("@signature", model.RazorpaySignature);
-                updateCmd.Parameters.AddWithValue("@orderid", model.OrderId);
-                updateCmd.Parameters.AddWithValue("@userid", userId);
-                await updateCmd.ExecuteNonQueryAsync();
+                    await using var updateCmd = new NpgsqlCommand(updateQuery, con, transaction);
+                    updateCmd.Parameters.AddWithValue("@paymentid", model.RazorpayPaymentId);
+                    updateCmd.Parameters.AddWithValue("@signature", model.RazorpaySignature);
+                    updateCmd.Parameters.AddWithValue("@orderid", model.OrderId);
+                    updateCmd.Parameters.AddWithValue("@userid", userId);
+
+                    if (await updateCmd.ExecuteNonQueryAsync() == 0)
+                    {
+                        await transaction.RollbackAsync();
+                        return new BadRequestObjectResult(new { success = false, message = "Order is not pending payment." });
+                    }
+
+                    await FulfillOrderInventoryAsync(con, transaction, model.OrderId);
+                    await ApplyCouponUsageForOrderAsync(con, transaction, model.OrderId, userId);
+                    await ClearUserCartAsync(con, transaction, userId);
+                    await transaction.CommitAsync();
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "Payment received but order fulfillment failed: " + ex.Message
+                    });
+                }
 
                 await TrySendOrderInvoiceAsync(con, model.OrderId, userId, "SUCCESS");
 
@@ -206,6 +236,88 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         orderNumber,
                         paymentStatus = "SUCCESS"
                     }
+                });
+            }
+            catch (Exception ex)
+            {
+                return new ObjectResult(new { success = false, message = ex.Message }) { StatusCode = 500 };
+            }
+        }
+
+        public async Task<IActionResult> InitiateOnlinePayment(int orderId, int userId)
+        {
+            try
+            {
+                using var con = new NpgsqlConnection(DbConnection);
+                await con.OpenAsync();
+
+                const string query = """
+                    SELECT id, payment_status, payment_method, final_amount, razorpay_order_id
+                    FROM orders
+                    WHERE id = @orderId AND userid = @userId
+                    LIMIT 1
+                    """;
+
+                await using var cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@orderId", orderId);
+                cmd.Parameters.AddWithValue("@userId", userId);
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (!await reader.ReadAsync())
+                    return new NotFoundObjectResult(new { success = false, message = "Order not found." });
+
+                var paymentStatus = reader["payment_status"]?.ToString();
+                var paymentMethod = reader["payment_method"]?.ToString();
+                var finalAmount = Convert.ToDecimal(reader["final_amount"]);
+                var existingRazorpayId = reader["razorpay_order_id"]?.ToString();
+                await reader.CloseAsync();
+
+                if (!string.Equals(paymentStatus, "PENDING", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "Order is not pending payment." });
+                }
+
+                if (!PaymentHelper.IsOnlinePayment(paymentMethod))
+                {
+                    return new BadRequestObjectResult(new { success = false, message = "This order is not an online payment order." });
+                }
+
+                if (!string.IsNullOrWhiteSpace(existingRazorpayId))
+                {
+                    return new OkObjectResult(new
+                    {
+                        success = true,
+                        message = "Payment already initiated.",
+                        data = new
+                        {
+                            orderId,
+                            razorpay = new
+                            {
+                                keyId = _razorpayService.KeyId,
+                                orderId = existingRazorpayId,
+                                amount = (int)Math.Round(finalAmount * 100, MidpointRounding.AwayFromZero),
+                                currency = "INR"
+                            }
+                        }
+                    });
+                }
+
+                var (razorpay, paymentError) = await CreateRazorpayCheckoutAsync(con, orderId, finalAmount);
+                if (razorpay == null)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = paymentError ?? "Could not start online payment.",
+                        razorpayConfigured = _razorpayService.IsConfigured
+                    });
+                }
+
+                return new OkObjectResult(new
+                {
+                    success = true,
+                    message = "Payment initiated.",
+                    data = new { orderId, razorpay }
                 });
             }
             catch (Exception ex)
@@ -474,12 +586,79 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
             await cmd.ExecuteNonQueryAsync();
         }
 
-        private async Task<object?> TryCreateRazorpayCheckoutAsync(
-            NpgsqlConnection con, int orderId, string orderNumber, decimal finalAmount)
+        private static async Task ApplyCouponUsageForOrderAsync(
+            NpgsqlConnection con, NpgsqlTransaction transaction, int orderId, int userId)
         {
+            const string query = """
+                INSERT INTO coupon_usage (couponid, userid, orderid)
+                SELECT couponid, @userId, @orderId
+                FROM orders
+                WHERE id = @orderId
+                  AND couponid IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM coupon_usage cu
+                      WHERE cu.orderid = @orderId AND cu.couponid = orders.couponid
+                  )
+                """;
+
+            await using var cmd = new NpgsqlCommand(query, con, transaction);
+            cmd.Parameters.AddWithValue("@orderId", orderId);
+            cmd.Parameters.AddWithValue("@userId", userId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        private static async Task FulfillOrderInventoryAsync(
+            NpgsqlConnection con, NpgsqlTransaction transaction, int orderId)
+        {
+            const string itemsQuery = """
+                SELECT productid, variantid, quantity, productname
+                FROM order_items
+                WHERE orderid = @orderId
+                """;
+
+            await using var itemsCmd = new NpgsqlCommand(itemsQuery, con, transaction);
+            itemsCmd.Parameters.AddWithValue("@orderId", orderId);
+            await using var reader = await itemsCmd.ExecuteReaderAsync();
+
+            var items = new List<OrderLineItem>();
+            while (await reader.ReadAsync())
+            {
+                items.Add(new OrderLineItem
+                {
+                    ProductId = Convert.ToInt32(reader["productid"]),
+                    VariantId = reader["variantid"] == DBNull.Value ? 0 : Convert.ToInt32(reader["variantid"]),
+                    Quantity = Convert.ToInt32(reader["quantity"]),
+                    ProductName = reader["productname"]?.ToString()
+                });
+            }
+            await reader.CloseAsync();
+
+            foreach (var item in items)
+                await DeductStockAsync(con, transaction, item);
+        }
+
+        private static async Task ClearUserCartAsync(
+            NpgsqlConnection con, NpgsqlTransaction transaction, int userId)
+        {
+            const string query = "DELETE FROM addcart WHERE userid = @userId";
+            await using var cmd = new NpgsqlCommand(query, con, transaction);
+            cmd.Parameters.AddWithValue("@userId", userId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        private async Task<(object? Razorpay, string? Error)> CreateRazorpayCheckoutAsync(
+            NpgsqlConnection con, int orderId, decimal finalAmount)
+        {
+            if (!_razorpayService.IsConfigured)
+            {
+                return (null, "Razorpay keys not configured. Set Razorpay:KeyId and Razorpay:KeySecret.");
+            }
+
             try
             {
-                var razorpayOrder = await _razorpayService.CreateOrderAsync(finalAmount, orderNumber);
+                var receipt = $"ord_{orderId}";
+                var razorpayOrder = await _razorpayService.CreateOrderAsync(finalAmount, receipt);
+
                 const string updateQuery = """
                     UPDATE orders SET razorpay_order_id = @RazorpayOrderId, updatedat = NOW() WHERE id = @OrderId
                     """;
@@ -488,17 +667,17 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 cmd.Parameters.AddWithValue("@OrderId", orderId);
                 await cmd.ExecuteNonQueryAsync();
 
-                return new
+                return (new
                 {
                     keyId = _razorpayService.KeyId,
                     orderId = razorpayOrder.Id,
                     amount = razorpayOrder.Amount,
                     currency = razorpayOrder.Currency
-                };
+                }, null);
             }
-            catch
+            catch (Exception ex)
             {
-                return null;
+                return (null, ex.Message);
             }
         }
 

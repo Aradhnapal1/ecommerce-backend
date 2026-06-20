@@ -15,6 +15,7 @@ namespace Ecommerce_Backend.Services
     public interface IRazorpayService
     {
         string KeyId { get; }
+        bool IsConfigured { get; }
         Task<RazorpayOrderResult> CreateOrderAsync(decimal amountInr, string receipt);
         bool VerifyPaymentSignature(string razorpayOrderId, string razorpayPaymentId, string razorpaySignature);
     }
@@ -34,6 +35,10 @@ namespace Ecommerce_Backend.Services
 
         public string KeyId => _configuration["Razorpay:KeyId"] ?? string.Empty;
 
+        public bool IsConfigured =>
+            !string.IsNullOrWhiteSpace(KeyId) &&
+            !string.IsNullOrWhiteSpace(_configuration["Razorpay:KeySecret"]);
+
         private string KeySecret => _configuration["Razorpay:KeySecret"]
             ?? throw new InvalidOperationException("Razorpay:KeySecret is not configured.");
 
@@ -41,34 +46,38 @@ namespace Ecommerce_Backend.Services
 
         public async Task<RazorpayOrderResult> CreateOrderAsync(decimal amountInr, string receipt)
         {
-            var keyId = KeyId;
-            if (string.IsNullOrWhiteSpace(keyId))
-                throw new InvalidOperationException("Razorpay:KeyId is not configured.");
+            if (!IsConfigured)
+                throw new InvalidOperationException("Razorpay is not configured. Set Razorpay:KeyId and Razorpay:KeySecret.");
 
             var amountPaise = (int)Math.Round(amountInr * 100, MidpointRounding.AwayFromZero);
             if (amountPaise < 100)
                 throw new InvalidOperationException("Order amount must be at least ₹1.");
 
-            var payload = new
+            var safeReceipt = receipt.Length > 40 ? receipt[..40] : receipt;
+
+            var payload = new Dictionary<string, object>
             {
-                amount = amountPaise,
-                currency = Currency,
-                receipt,
-                payment_capture = 1
+                ["amount"] = amountPaise,
+                ["currency"] = Currency,
+                ["receipt"] = safeReceipt,
+                ["payment_capture"] = true
             };
 
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.razorpay.com/v1/orders");
-            var authToken = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{keyId}:{KeySecret}"));
+            var authToken = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{KeyId}:{KeySecret}"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authToken);
-            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
 
             var response = await _httpClient.SendAsync(request);
             var body = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Razorpay order creation failed: {Body}", body);
-                throw new InvalidOperationException("Could not create Razorpay payment order.");
+                _logger.LogError("Razorpay create order failed ({Status}): {Body}", response.StatusCode, body);
+                throw new InvalidOperationException($"Razorpay error: {body}");
             }
 
             using var doc = JsonDocument.Parse(body);
@@ -89,14 +98,24 @@ namespace Ecommerce_Backend.Services
                 return false;
             }
 
-            var payload = $"{razorpayOrderId}|{razorpayPaymentId}";
-            using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(KeySecret));
-            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-            var expected = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            try
+            {
+                var payload = $"{razorpayOrderId}|{razorpayPaymentId}";
+                using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(KeySecret));
+                var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
+                var expected = Convert.ToHexString(hash).ToLowerInvariant();
+                var received = razorpaySignature.Trim().ToLowerInvariant();
 
-            return CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(expected),
-                Encoding.UTF8.GetBytes(razorpaySignature.Trim().ToLowerInvariant()));
+                return expected.Length == received.Length &&
+                       CryptographicOperations.FixedTimeEquals(
+                           Encoding.UTF8.GetBytes(expected),
+                           Encoding.UTF8.GetBytes(received));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Razorpay signature verification error");
+                return false;
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> CreateOrder(CreateOrderModel model, int userId);
         Task<IActionResult> BuyNow(BuyNowModel model, int userId);
         Task<IActionResult> VerifyOnlinePayment(VerifyPaymentModel model, int userId);
+        Task<IActionResult> InitiateOnlinePayment(int orderId, int userId);
         Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin);
         Task<OrderDetailsModel?> GetOrderById(int orderId, int userId, bool isAdmin);
         Task<IActionResult> UpdateOrderStatus(int orderId, string status);
@@ -84,6 +85,17 @@ namespace Ecommerce_Backend.Models.BusinessLayer
             }
 
             return await _databaseLayer.VerifyOnlinePayment(model, userId);
+        }
+
+        public async Task<IActionResult> InitiateOnlinePayment(int orderId, int userId)
+        {
+            if (orderId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Invalid order ID" });
+
+            if (userId <= 0)
+                return new BadRequestObjectResult(new { success = false, message = "Invalid user ID" });
+
+            return await _databaseLayer.InitiateOnlinePayment(orderId, userId);
         }
 
         public async Task<List<OrderDetailsModel>> GetAllOrders(int userId, bool isAdmin)

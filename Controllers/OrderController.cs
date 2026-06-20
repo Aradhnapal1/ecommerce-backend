@@ -39,6 +39,13 @@ namespace Ecommerce_Backend.Controllers
             return await _businessLayer.VerifyOnlinePayment(model, userId);
         }
 
+        [HttpPost("initiate-payment/{orderId:int}")]
+        public async Task<IActionResult> InitiatePayment(int orderId)
+        {
+            var userId = UserContextHelper.GetUserId(User)!.Value;
+            return await _businessLayer.InitiateOnlinePayment(orderId, userId);
+        }
+
         [HttpGet("all")]
         [Authorize]
         public async Task<IActionResult> GetAllOrders()

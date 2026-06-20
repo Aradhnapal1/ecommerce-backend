@@ -26,6 +26,10 @@ namespace Ecommerce_Backend.Helpers
                     ALTER TABLE brands ADD COLUMN IF NOT EXISTS slug VARCHAR(255);
                     ALTER TABLE colors ADD COLUMN IF NOT EXISTS slug VARCHAR(255);
                     ALTER TABLE sizes ADD COLUMN IF NOT EXISTS slug VARCHAR(255);
+
+                    ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255);
+                    ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(255);
+                    ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_signature TEXT;
                     """;
 
                 await using var cmd = new NpgsqlCommand(sql, conn);
