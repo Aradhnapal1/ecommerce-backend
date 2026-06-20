@@ -163,5 +163,7 @@ namespace Ecommerce_Backend.Controllers
             var result = await _businessLayer.DeleteProduct(id);
             return Ok(result);
         }
+
+       
     }
 }

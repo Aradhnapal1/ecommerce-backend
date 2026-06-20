@@ -78,6 +78,7 @@ namespace Ecommerce_Backend.Controllers
             {
                 await _businessLayer.MergeGuestCartToUser(user.id, ipAddress);
                 await _businessLayer.MergeGuestWishlistToUser(user.id, ipAddress);
+                await _businessLayer.MergeGuestCompareToUser(user.id, ipAddress);
             }
 
             string token = _jwtService.GenerateToken(user);

@@ -449,6 +449,19 @@ namespace Ecommerce_Backend.Models
         public object? Item { get; set; }
     }
 
+    public class CompareModel
+    {
+        public int Id { get; set; }
+        public int? UserId { get; set; }
+        public int ProductId { get; set; }
+        public int? VariantId { get; set; }
+        public int? ColorId { get; set; }
+        public int? SizeId { get; set; }
+        public string? IpAddress { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public object? Item { get; set; }
+    }
+
 
 
 

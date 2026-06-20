@@ -19,6 +19,7 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> GetProductsByBrandSlug(string brandSlug, ProductFilterRequest? filter);
         Task<IActionResult> GetProductVariants(int productId);
         Task<IActionResult> GetTopDiscountedProducts();
+
     }
 
     public partial class BusinessLayer : IBusinessLayer

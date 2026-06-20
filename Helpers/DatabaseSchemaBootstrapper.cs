@@ -30,6 +30,21 @@ namespace Ecommerce_Backend.Helpers
                     ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255);
                     ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(255);
                     ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_signature TEXT;
+
+                    CREATE TABLE IF NOT EXISTS product_compare (
+                        id SERIAL PRIMARY KEY,
+                        userid INT NULL,
+                        productid INT NOT NULL,
+                        variantid INT NULL,
+                        ipaddress VARCHAR(100),
+                        createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT fk_product_compare_user
+                            FOREIGN KEY (userid) REFERENCES user_register(id) ON DELETE CASCADE,
+                        CONSTRAINT fk_product_compare_product
+                            FOREIGN KEY (productid) REFERENCES products(id) ON DELETE CASCADE,
+                        CONSTRAINT fk_product_compare_variant
+                            FOREIGN KEY (variantid) REFERENCES product_variants(id) ON DELETE CASCADE
+                    );
                     """;
 
                 await using var cmd = new NpgsqlCommand(sql, conn);
