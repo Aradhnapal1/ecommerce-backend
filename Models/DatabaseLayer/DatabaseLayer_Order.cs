@@ -77,7 +77,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                     var cartQuery = @"
                         SELECT 
-                            ac.id, ac.userid, ac.productid, ac.variantid, ac.quantity, 
+                            ac.id, ac.userid, ac.productid, ac.variantid, ac.colorid, ac.sizeid, ac.quantity, 
                             p.productname,
                             COALESCE(pv.saleprice, p.saleprice) AS saleprice,
                             COALESCE(pv.mrp, p.mrp) AS mrp,
@@ -89,8 +89,17 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         FROM addcart ac
                         JOIN products p ON p.id = ac.productid
                         LEFT JOIN product_variants pv ON pv.id = ac.variantid
-                        LEFT JOIN colors c ON c.id = CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER)
-                        LEFT JOIN sizes s ON s.id = CAST((COALESCE(pv.sizes, p.sizes))[1] AS INTEGER)
+                        LEFT JOIN colors c ON c.id = COALESCE(ac.colorid, CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER))
+                        LEFT JOIN sizes s ON s.id = COALESCE(
+                            ac.sizeid,
+                            (
+                                SELECT sz.id
+                                FROM sizes sz
+                                WHERE sz.id = ANY(COALESCE(pv.sizes, ARRAY[]::int[]))
+                                ORDER BY sz.id
+                                LIMIT 1
+                            )
+                        )
                         WHERE ac.userid = @UserId";
 
                     using (var cartCmd = new NpgsqlCommand(cartQuery, con))

@@ -482,11 +482,26 @@ namespace Ecommerce_Backend.Models
 
         public int? SizeId { get; set; }
 
+        // Common frontend aliases (form field names)
+        public int? Color { get; set; }
+
+        public int? Size { get; set; }
+
+        public string? ColorSlug { get; set; }
+
+        public string? SizeSlug { get; set; }
+
         public int Quantity { get; set; } = 1;
 
         public string? IpAddress { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+        public void NormalizeFormFields()
+        {
+            ColorId ??= Color;
+            SizeId ??= Size;
+        }
     }
 
 

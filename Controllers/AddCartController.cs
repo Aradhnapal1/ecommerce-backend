@@ -35,6 +35,25 @@ namespace Ecommerce_Backend.Controllers
 
             cart.UserId = userId;
             cart.IpAddress = ipAddress;
+            cart.NormalizeFormFields();
+
+            if (!cart.ColorId.HasValue &&
+                int.TryParse(Request.Form["color_id"], out var colorId))
+            {
+                cart.ColorId = colorId;
+            }
+
+            if (!cart.SizeId.HasValue &&
+                int.TryParse(Request.Form["size_id"], out var sizeId))
+            {
+                cart.SizeId = sizeId;
+            }
+
+            if (string.IsNullOrWhiteSpace(cart.ColorSlug))
+                cart.ColorSlug = Request.Form["color_slug"].FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(cart.SizeSlug))
+                cart.SizeSlug = Request.Form["size_slug"].FirstOrDefault();
 
             return await _businessLayer.AddCart(cart);
         }

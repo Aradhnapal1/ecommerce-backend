@@ -31,6 +31,9 @@ namespace Ecommerce_Backend.Helpers
                     ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(255);
                     ALTER TABLE orders ADD COLUMN IF NOT EXISTS razorpay_signature TEXT;
 
+                    ALTER TABLE addcart ADD COLUMN IF NOT EXISTS colorid INT NULL;
+                    ALTER TABLE addcart ADD COLUMN IF NOT EXISTS sizeid INT NULL;
+
                     CREATE TABLE IF NOT EXISTS product_compare (
                         id SERIAL PRIMARY KEY,
                         userid INT NULL,

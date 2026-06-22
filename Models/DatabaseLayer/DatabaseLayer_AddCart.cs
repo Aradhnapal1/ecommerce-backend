@@ -47,20 +47,13 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         cart.IpAddress);
                 }
 
-                cart.VariantId = await CartHelper.ResolveVariantIdAsync(
-                    con,
-                    cart.ProductId,
-                    cart.VariantId,
-                    cart.ColorId,
-                    cart.SizeId);
-
-                if (!cart.VariantId.HasValue &&
-                    (cart.ColorId.HasValue || cart.SizeId.HasValue))
+                var selection = await CartHelper.PrepareCartSelectionAsync(con, cart);
+                if (!selection.Success)
                 {
                     return new BadRequestObjectResult(new
                     {
                         success = false,
-                        message = "No variant found for the selected color and size."
+                        message = selection.ErrorMessage
                     });
                 }
 
@@ -105,6 +98,10 @@ WHERE id = @variantid";
                             productId
                         );
                 }
+                else if (cart.ColorId.HasValue || cart.SizeId.HasValue)
+                {
+                    // Product without variants — color/size stored on cart row directly.
+                }
 
                 // ====================================
                 // Existing Cart Check
@@ -130,6 +127,12 @@ WHERE
     AND COALESCE(variantid,0)
         =
         COALESCE(@variantid,0)
+    AND COALESCE(colorid,0)
+        =
+        COALESCE(@colorid,0)
+    AND COALESCE(sizeid,0)
+        =
+        COALESCE(@sizeid,0)
 LIMIT 1";
 
                     checkCmd.Parameters.AddWithValue(
@@ -150,6 +153,12 @@ WHERE
     AND COALESCE(variantid,0)
         =
         COALESCE(@variantid,0)
+    AND COALESCE(colorid,0)
+        =
+        COALESCE(@colorid,0)
+    AND COALESCE(sizeid,0)
+        =
+        COALESCE(@sizeid,0)
 LIMIT 1";
 
                     checkCmd.Parameters.AddWithValue(
@@ -172,6 +181,22 @@ LIMIT 1";
                 ).Value =
                     cart.VariantId.HasValue
                     ? cart.VariantId.Value
+                    : DBNull.Value;
+
+                checkCmd.Parameters.Add(
+                    "@colorid",
+                    NpgsqlTypes.NpgsqlDbType.Integer
+                ).Value =
+                    cart.ColorId.HasValue
+                    ? cart.ColorId.Value
+                    : DBNull.Value;
+
+                checkCmd.Parameters.Add(
+                    "@sizeid",
+                    NpgsqlTypes.NpgsqlDbType.Integer
+                ).Value =
+                    cart.SizeId.HasValue
+                    ? cart.SizeId.Value
                     : DBNull.Value;
 
                 using var reader =
@@ -244,6 +269,8 @@ INSERT INTO addcart
     userid,
     productid,
     variantid,
+    colorid,
+    sizeid,
     quantity,
     ipaddress,
     createdat,
@@ -254,6 +281,8 @@ VALUES
     @userid,
     @productid,
     @variantid,
+    @colorid,
+    @sizeid,
     @quantity,
     @ipaddress,
     NOW(),
@@ -286,6 +315,22 @@ RETURNING id";
                 ).Value =
                     cart.VariantId.HasValue
                     ? cart.VariantId.Value
+                    : DBNull.Value;
+
+                insertCmd.Parameters.Add(
+                    "@colorid",
+                    NpgsqlTypes.NpgsqlDbType.Integer
+                ).Value =
+                    cart.ColorId.HasValue
+                    ? cart.ColorId.Value
+                    : DBNull.Value;
+
+                insertCmd.Parameters.Add(
+                    "@sizeid",
+                    NpgsqlTypes.NpgsqlDbType.Integer
+                ).Value =
+                    cart.SizeId.HasValue
+                    ? cart.SizeId.Value
                     : DBNull.Value;
 
                 insertCmd.Parameters.AddWithValue(
@@ -355,25 +400,37 @@ SELECT
     COALESCE(pv.mrp, p.mrp) AS mrp,
     COALESCE(pv.saleprice, p.saleprice) AS saleprice,
     COALESCE(pv.variantimageurl, p.productimageurl) AS imageurl,
-    c.id AS colorid,
+    COALESCE(ac.colorid, CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER)) AS resolved_colorid,
     c.color_name,
     c.color_code,
     c.slug AS color_slug,
-    s.id AS sizeid,
+    COALESCE(
+        ac.sizeid,
+        (
+            SELECT sz.id
+            FROM sizes sz
+            WHERE sz.id = ANY(COALESCE(pv.sizes, ARRAY[]::int[]))
+            ORDER BY sz.id
+            LIMIT 1
+        )
+    ) AS resolved_sizeid,
     s.size_name,
     s.slug AS size_slug,
     (ac.quantity * COALESCE(pv.saleprice, p.saleprice)) AS totalprice
 FROM addcart ac
 INNER JOIN products p ON p.id = ac.productid
 LEFT JOIN product_variants pv ON pv.id = ac.variantid
-LEFT JOIN colors c ON c.id = CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER)
-LEFT JOIN LATERAL (
-    SELECT sz.id, sz.size_name, sz.slug
-    FROM sizes sz
-    WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
-    ORDER BY sz.id
-    LIMIT 1
-) s ON TRUE
+LEFT JOIN colors c ON c.id = COALESCE(ac.colorid, CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER))
+LEFT JOIN sizes s ON s.id = COALESCE(
+    ac.sizeid,
+    (
+        SELECT sz.id
+        FROM sizes sz
+        WHERE sz.id = ANY(COALESCE(pv.sizes, ARRAY[]::int[]))
+        ORDER BY sz.id
+        LIMIT 1
+    )
+)
 WHERE ";
 
                 if (userId.HasValue)
@@ -436,9 +493,9 @@ WHERE ";
                         SalePrice = Convert.ToDecimal(reader["saleprice"]),
                         TotalPrice = itemTotal,
                         ImageUrl = reader["imageurl"]?.ToString(),
-                        ColorId = reader["colorid"] == DBNull.Value
+                        ColorId = reader["resolved_colorid"] == DBNull.Value
                             ? (int?)null
-                            : Convert.ToInt32(reader["colorid"]),
+                            : Convert.ToInt32(reader["resolved_colorid"]),
                         ColorName = reader["color_name"] == DBNull.Value
                             ? null
                             : reader["color_name"].ToString(),
@@ -448,9 +505,9 @@ WHERE ";
                         ColorSlug = reader["color_slug"] == DBNull.Value
                             ? null
                             : reader["color_slug"].ToString(),
-                        SizeId = reader["sizeid"] == DBNull.Value
+                        SizeId = reader["resolved_sizeid"] == DBNull.Value
                             ? (int?)null
-                            : Convert.ToInt32(reader["sizeid"]),
+                            : Convert.ToInt32(reader["resolved_sizeid"]),
                         SizeName = reader["size_name"] == DBNull.Value
                             ? null
                             : reader["size_name"].ToString(),
