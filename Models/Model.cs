@@ -501,6 +501,18 @@ namespace Ecommerce_Backend.Models
         {
             ColorId ??= Color;
             SizeId ??= Size;
+
+            if (VariantId is <= 0)
+                VariantId = null;
+
+            if (ColorId is <= 0)
+                ColorId = null;
+
+            if (SizeId is <= 0)
+                SizeId = null;
+
+            if (ProductId <= 0 && VariantId == null)
+                ProductId = 0;
         }
     }
 

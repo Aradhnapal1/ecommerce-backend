@@ -24,15 +24,24 @@ namespace Ecommerce_Backend.Helpers
             if (cart.VariantId.HasValue)
             {
                 var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
-                if (variant == null)
+                if (variant != null)
                 {
-                    return (false, "Variant not found");
+                    ApplyVariantToCart(cart, variant);
+                }
+                else
+                {
+                    // Frontend may send stale/invalid variantId (e.g. 0) for simple products.
+                    cart.VariantId = null;
+                }
+            }
+
+            if (!cart.VariantId.HasValue && cart.ProductId > 0)
+            {
+                if (!await ProductExistsAsync(connection, cart.ProductId))
+                {
+                    return (false, "Product not found");
                 }
 
-                ApplyVariantToCart(cart, variant);
-            }
-            else if (cart.ProductId > 0)
-            {
                 if (cart.ColorId.HasValue || cart.SizeId.HasValue)
                 {
                     cart.VariantId = await ResolveVariantIdAsync(
@@ -72,13 +81,12 @@ namespace Ecommerce_Backend.Helpers
                     }
                 }
             }
-            else
+            else if (!cart.VariantId.HasValue)
             {
-                return (false, "ProductId or VariantId is required.");
+                return (false, "ProductId is required.");
             }
 
-            if (cart.VariantId.HasValue &&
-                !cart.SizeId.HasValue)
+            if (cart.VariantId.HasValue && !cart.SizeId.HasValue)
             {
                 var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
                 if (variant != null)
@@ -114,7 +122,7 @@ namespace Ecommerce_Backend.Helpers
             int? colorId,
             int? sizeId)
         {
-            if (variantId.HasValue)
+            if (variantId is > 0)
                 return variantId;
 
             if (!colorId.HasValue && !sizeId.HasValue)
@@ -224,6 +232,25 @@ namespace Ecommerce_Backend.Helpers
             cart.SizeId ??= variant.DefaultSizeId;
         }
 
+        private static async Task<bool> ProductExistsAsync(
+            NpgsqlConnection connection,
+            int productId)
+        {
+            const string query = """
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM products
+                    WHERE id = @productid
+                      AND isactive = TRUE
+                )
+                """;
+
+            await using var cmd = new NpgsqlCommand(query, connection);
+            cmd.Parameters.AddWithValue("@productid", productId);
+            var result = await cmd.ExecuteScalarAsync();
+            return result is bool exists && exists;
+        }
+
         private static async Task<VariantInfo?> GetVariantByIdAsync(
             NpgsqlConnection connection,
             int variantId)
@@ -321,9 +348,16 @@ namespace Ecommerce_Backend.Helpers
 
             if (!cart.SizeId.HasValue && reader["sizes"] != DBNull.Value)
             {
-                var sizes = reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"));
-                if (sizes.Length > 0)
-                    cart.SizeId = sizes.OrderBy(static s => s).First();
+                try
+                {
+                    var sizes = reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"));
+                    if (sizes.Length > 0)
+                        cart.SizeId = sizes.OrderBy(static s => s).First();
+                }
+                catch
+                {
+                    // Legacy text[] sizes column — ignore and leave size null.
+                }
             }
         }
 

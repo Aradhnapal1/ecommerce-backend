@@ -363,7 +363,7 @@ SELECT
         (
             SELECT sz.id
             FROM sizes sz
-            WHERE sz.id = ANY(COALESCE(pv.sizes, ARRAY[]::int[]))
+            WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
             ORDER BY sz.id
             LIMIT 1
         )
@@ -380,7 +380,7 @@ LEFT JOIN sizes s ON s.id = COALESCE(
     (
         SELECT sz.id
         FROM sizes sz
-        WHERE sz.id = ANY(COALESCE(pv.sizes, ARRAY[]::int[]))
+        WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
         ORDER BY sz.id
         LIMIT 1
     )

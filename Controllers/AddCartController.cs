@@ -37,6 +37,20 @@ namespace Ecommerce_Backend.Controllers
             cart.IpAddress = ipAddress;
             cart.NormalizeFormFields();
 
+            if (!cart.VariantId.HasValue &&
+                int.TryParse(Request.Form["variantId"], out var variantId) &&
+                variantId > 0)
+            {
+                cart.VariantId = variantId;
+            }
+
+            if (cart.ProductId <= 0 &&
+                int.TryParse(Request.Form["productId"], out var productId) &&
+                productId > 0)
+            {
+                cart.ProductId = productId;
+            }
+
             if (!cart.ColorId.HasValue &&
                 int.TryParse(Request.Form["color_id"], out var colorId))
             {
