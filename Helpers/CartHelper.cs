@@ -42,65 +42,14 @@ namespace Ecommerce_Backend.Helpers
                     return (false, "Product not found");
                 }
 
-                if (cart.ColorId.HasValue || cart.SizeId.HasValue)
-                {
-                    cart.VariantId = await ResolveVariantIdAsync(
-                        connection,
-                        cart.ProductId,
-                        null,
-                        cart.ColorId,
-                        cart.SizeId);
-
-                    if (cart.VariantId.HasValue)
-                    {
-                        var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
-                        if (variant != null)
-                        {
-                            ApplyVariantToCart(cart, variant);
-                        }
-                    }
-                    else if (await ProductHasVariantsAsync(connection, cart.ProductId))
-                    {
-                        return (false, "No variant found for the selected color and size.");
-                    }
-                    else
-                    {
-                        await ApplyProductDefaultsAsync(connection, cart);
-                    }
-                }
-                else
-                {
-                    var defaultVariant = await GetDefaultVariantAsync(connection, cart.ProductId);
-                    if (defaultVariant != null)
-                    {
-                        ApplyVariantToCart(cart, defaultVariant);
-                    }
-                    else
-                    {
-                        await ApplyProductDefaultsAsync(connection, cart);
-                    }
-                }
+                await ResolveOrApplyDefaultForProductAsync(connection, cart);
             }
             else if (!cart.VariantId.HasValue)
             {
                 return (false, "ProductId is required.");
             }
 
-            if (cart.VariantId.HasValue && !cart.SizeId.HasValue)
-            {
-                var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
-                if (variant != null)
-                {
-                    cart.SizeId = variant.DefaultSizeId;
-                }
-            }
-
-            if (cart.SizeId.HasValue &&
-                cart.VariantId.HasValue &&
-                !await IsSizeAllowedForVariantAsync(connection, cart.VariantId.Value, cart.SizeId.Value))
-            {
-                return (false, "Selected size is not available for this product variant.");
-            }
+            await EnsureValidSizeForVariantAsync(connection, cart);
 
             if (!cart.ColorId.HasValue && cart.VariantId.HasValue)
             {
@@ -113,6 +62,71 @@ namespace Ecommerce_Backend.Helpers
             }
 
             return (true, null);
+        }
+
+        private static async Task ResolveOrApplyDefaultForProductAsync(
+            NpgsqlConnection connection,
+            AddCartModel cart)
+        {
+            if (cart.ColorId.HasValue || cart.SizeId.HasValue)
+            {
+                cart.VariantId = await ResolveVariantIdAsync(
+                    connection,
+                    cart.ProductId,
+                    null,
+                    cart.ColorId,
+                    cart.SizeId);
+
+                if (cart.VariantId.HasValue)
+                {
+                    var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
+                    if (variant != null)
+                    {
+                        ApplyVariantToCart(cart, variant, preserveSelectedSize: true);
+                        return;
+                    }
+                }
+            }
+
+            await ApplyDefaultSelectionForProductAsync(connection, cart);
+        }
+
+        private static async Task ApplyDefaultSelectionForProductAsync(
+            NpgsqlConnection connection,
+            AddCartModel cart)
+        {
+            var defaultVariant = await GetDefaultVariantAsync(connection, cart.ProductId);
+            if (defaultVariant != null)
+            {
+                ApplyVariantToCart(cart, defaultVariant);
+                return;
+            }
+
+            cart.VariantId = null;
+            await ApplyProductDefaultsAsync(connection, cart);
+        }
+
+        private static async Task EnsureValidSizeForVariantAsync(
+            NpgsqlConnection connection,
+            AddCartModel cart)
+        {
+            if (!cart.VariantId.HasValue)
+                return;
+
+            var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
+            if (variant == null)
+                return;
+
+            if (!cart.SizeId.HasValue)
+            {
+                cart.SizeId = variant.DefaultSizeId;
+                return;
+            }
+
+            if (!variant.Sizes.Contains(cart.SizeId.Value))
+            {
+                cart.SizeId = variant.DefaultSizeId;
+            }
         }
 
         public static async Task<int?> ResolveVariantIdAsync(
@@ -224,12 +238,19 @@ namespace Ecommerce_Backend.Helpers
                 Sizes.Length > 0 ? Sizes.OrderBy(static s => s).First() : null;
         }
 
-        private static void ApplyVariantToCart(AddCartModel cart, VariantInfo variant)
+        private static void ApplyVariantToCart(
+            AddCartModel cart,
+            VariantInfo variant,
+            bool preserveSelectedSize = false)
         {
             cart.ProductId = variant.ProductId;
             cart.VariantId = variant.Id;
             cart.ColorId ??= variant.ColorId;
-            cart.SizeId ??= variant.DefaultSizeId;
+
+            if (!preserveSelectedSize || !cart.SizeId.HasValue)
+            {
+                cart.SizeId ??= variant.DefaultSizeId;
+            }
         }
 
         private static async Task<bool> ProductExistsAsync(
@@ -359,45 +380,6 @@ namespace Ecommerce_Backend.Helpers
                     // Legacy text[] sizes column — ignore and leave size null.
                 }
             }
-        }
-
-        private static async Task<bool> ProductHasVariantsAsync(
-            NpgsqlConnection connection,
-            int productId)
-        {
-            const string query = """
-                SELECT EXISTS(
-                    SELECT 1
-                    FROM product_variants
-                    WHERE productid = @productid
-                      AND isactive = TRUE
-                )
-                """;
-
-            await using var cmd = new NpgsqlCommand(query, connection);
-            cmd.Parameters.AddWithValue("@productid", productId);
-            var result = await cmd.ExecuteScalarAsync();
-            return result is bool exists && exists;
-        }
-
-        private static async Task<bool> IsSizeAllowedForVariantAsync(
-            NpgsqlConnection connection,
-            int variantId,
-            int sizeId)
-        {
-            const string query = """
-                SELECT @sizeid = ANY(sizes)
-                FROM product_variants
-                WHERE id = @variantid
-                LIMIT 1
-                """;
-
-            await using var cmd = new NpgsqlCommand(query, connection);
-            cmd.Parameters.AddWithValue("@variantid", variantId);
-            cmd.Parameters.AddWithValue("@sizeid", sizeId);
-
-            var result = await cmd.ExecuteScalarAsync();
-            return result is bool allowed && allowed;
         }
 
         private static async Task<int?> GetVariantColorIdAsync(
