@@ -23,24 +23,67 @@ namespace Ecommerce_Backend.Helpers
 
             if (cart.VariantId.HasValue)
             {
-                await ApplyVariantSelectionAsync(connection, cart);
-            }
-            else if (cart.ColorId.HasValue || cart.SizeId.HasValue)
-            {
-                cart.VariantId = await ResolveVariantIdAsync(
-                    connection,
-                    cart.ProductId,
-                    null,
-                    cart.ColorId,
-                    cart.SizeId);
-
-                if (cart.VariantId.HasValue)
+                var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
+                if (variant == null)
                 {
-                    await ApplyVariantSelectionAsync(connection, cart);
+                    return (false, "Variant not found");
                 }
-                else if (await ProductHasVariantsAsync(connection, cart.ProductId))
+
+                ApplyVariantToCart(cart, variant);
+            }
+            else if (cart.ProductId > 0)
+            {
+                if (cart.ColorId.HasValue || cart.SizeId.HasValue)
                 {
-                    return (false, "No variant found for the selected color and size.");
+                    cart.VariantId = await ResolveVariantIdAsync(
+                        connection,
+                        cart.ProductId,
+                        null,
+                        cart.ColorId,
+                        cart.SizeId);
+
+                    if (cart.VariantId.HasValue)
+                    {
+                        var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
+                        if (variant != null)
+                        {
+                            ApplyVariantToCart(cart, variant);
+                        }
+                    }
+                    else if (await ProductHasVariantsAsync(connection, cart.ProductId))
+                    {
+                        return (false, "No variant found for the selected color and size.");
+                    }
+                    else
+                    {
+                        await ApplyProductDefaultsAsync(connection, cart);
+                    }
+                }
+                else
+                {
+                    var defaultVariant = await GetDefaultVariantAsync(connection, cart.ProductId);
+                    if (defaultVariant != null)
+                    {
+                        ApplyVariantToCart(cart, defaultVariant);
+                    }
+                    else
+                    {
+                        await ApplyProductDefaultsAsync(connection, cart);
+                    }
+                }
+            }
+            else
+            {
+                return (false, "ProductId or VariantId is required.");
+            }
+
+            if (cart.VariantId.HasValue &&
+                !cart.SizeId.HasValue)
+            {
+                var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
+                if (variant != null)
+                {
+                    cart.SizeId = variant.DefaultSizeId;
                 }
             }
 
@@ -51,9 +94,14 @@ namespace Ecommerce_Backend.Helpers
                 return (false, "Selected size is not available for this product variant.");
             }
 
-            if (cart.VariantId.HasValue && !cart.ColorId.HasValue)
+            if (!cart.ColorId.HasValue && cart.VariantId.HasValue)
             {
                 cart.ColorId = await GetVariantColorIdAsync(connection, cart.VariantId.Value);
+            }
+
+            if (!cart.SizeId.HasValue && cart.ProductId > 0)
+            {
+                await ApplyProductDefaultsAsync(connection, cart);
             }
 
             return (true, null);
@@ -158,29 +206,111 @@ namespace Ecommerce_Backend.Helpers
             await moveCmd.ExecuteNonQueryAsync();
         }
 
-        private static async Task ApplyVariantSelectionAsync(
-            NpgsqlConnection connection,
-            AddCartModel cart)
+        private sealed class VariantInfo
         {
-            if (!cart.VariantId.HasValue)
-                return;
+            public int Id { get; init; }
+            public int ProductId { get; init; }
+            public int? ColorId { get; init; }
+            public int[] Sizes { get; init; } = Array.Empty<int>();
+            public int? DefaultSizeId =>
+                Sizes.Length > 0 ? Sizes.OrderBy(static s => s).First() : null;
+        }
 
+        private static void ApplyVariantToCart(AddCartModel cart, VariantInfo variant)
+        {
+            cart.ProductId = variant.ProductId;
+            cart.VariantId = variant.Id;
+            cart.ColorId ??= variant.ColorId;
+            cart.SizeId ??= variant.DefaultSizeId;
+        }
+
+        private static async Task<VariantInfo?> GetVariantByIdAsync(
+            NpgsqlConnection connection,
+            int variantId)
+        {
             const string query = """
-                SELECT productid, color, sizes
+                SELECT id, productid, color, sizes
                 FROM product_variants
                 WHERE id = @variantid
-                  AND isactive = TRUE
                 LIMIT 1
                 """;
 
             await using var cmd = new NpgsqlCommand(query, connection);
-            cmd.Parameters.AddWithValue("@variantid", cart.VariantId.Value);
+            cmd.Parameters.AddWithValue("@variantid", variantId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return null;
+
+            return MapVariant(reader);
+        }
+
+        private static async Task<VariantInfo?> GetDefaultVariantAsync(
+            NpgsqlConnection connection,
+            int productId)
+        {
+            const string query = """
+                SELECT id, productid, color, sizes
+                FROM product_variants
+                WHERE productid = @productid
+                  AND isactive = TRUE
+                ORDER BY id
+                LIMIT 1
+                """;
+
+            await using var cmd = new NpgsqlCommand(query, connection);
+            cmd.Parameters.AddWithValue("@productid", productId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return null;
+
+            return MapVariant(reader);
+        }
+
+        private static VariantInfo MapVariant(NpgsqlDataReader reader)
+        {
+            int? colorId = null;
+            if (reader["color"] != DBNull.Value)
+            {
+                var colorText = reader["color"]?.ToString();
+                if (int.TryParse(colorText, out var parsedColorId))
+                    colorId = parsedColorId;
+            }
+
+            var sizes = reader["sizes"] == DBNull.Value
+                ? Array.Empty<int>()
+                : reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"));
+
+            return new VariantInfo
+            {
+                Id = Convert.ToInt32(reader["id"]),
+                ProductId = Convert.ToInt32(reader["productid"]),
+                ColorId = colorId,
+                Sizes = sizes
+            };
+        }
+
+        private static async Task ApplyProductDefaultsAsync(
+            NpgsqlConnection connection,
+            AddCartModel cart)
+        {
+            if (cart.ColorId.HasValue && cart.SizeId.HasValue)
+                return;
+
+            const string query = """
+                SELECT color, sizes
+                FROM products
+                WHERE id = @productid
+                LIMIT 1
+                """;
+
+            await using var cmd = new NpgsqlCommand(query, connection);
+            cmd.Parameters.AddWithValue("@productid", cart.ProductId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
                 return;
-
-            cart.ProductId = Convert.ToInt32(reader["productid"]);
 
             if (!cart.ColorId.HasValue && reader["color"] != DBNull.Value)
             {
@@ -193,7 +323,7 @@ namespace Ecommerce_Backend.Helpers
             {
                 var sizes = reader.GetFieldValue<int[]>(reader.GetOrdinal("sizes"));
                 if (sizes.Length > 0)
-                    cart.SizeId = sizes[0];
+                    cart.SizeId = sizes.OrderBy(static s => s).First();
             }
         }
 

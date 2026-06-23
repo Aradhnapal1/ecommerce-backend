@@ -58,52 +58,6 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 }
 
                 // ====================================
-                // Variant -> Product Mapping
-                // ====================================
-
-                if (cart.VariantId.HasValue)
-                {
-                    string variantQuery = @"
-SELECT productid
-FROM product_variants
-WHERE id = @variantid";
-
-                    using var variantCmd =
-                        new NpgsqlCommand(
-                            variantQuery,
-                            con
-                        );
-
-                    variantCmd.Parameters.AddWithValue(
-                        "@variantid",
-                        cart.VariantId.Value
-                    );
-
-                    var productId =
-                        await variantCmd
-                        .ExecuteScalarAsync();
-
-                    if (productId == null)
-                    {
-                        return new BadRequestObjectResult(
-                            new
-                            {
-                                success = false,
-                                message = "Variant not found"
-                            });
-                    }
-
-                    cart.ProductId =
-                        Convert.ToInt32(
-                            productId
-                        );
-                }
-                else if (cart.ColorId.HasValue || cart.SizeId.HasValue)
-                {
-                    // Product without variants — color/size stored on cart row directly.
-                }
-
-                // ====================================
                 // Existing Cart Check
                 // ====================================
 
