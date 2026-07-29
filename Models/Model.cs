@@ -171,7 +171,8 @@ namespace Ecommerce_Backend.Models
         public string ProductName { get; set; }
         public string? Slug { get; set; }
         public string? Type { get; set; }
-        public string? ShortDescription { get; set; }
+        public string? ShortDescription { get; set; } // DB: TEXT (nullable)
+
         public string? Description { get; set; }
 
         public string? SKU { get; set; }
@@ -194,6 +195,7 @@ namespace Ecommerce_Backend.Models
         public IFormFile? ProductImage { get; set; }
         public List<IFormFile>? GalleryFiles { get; set; }
 
+        // Optional — product can exist without sizes
         public int[]? Sizes { get; set; }
 
         public string? Color { get; set; }
@@ -373,7 +375,7 @@ namespace Ecommerce_Backend.Models
 
         public string? SKU { get; set; }
 
-        // ONLY SIZE IDS
+        // OPTIONAL SIZE IDS — nullable / empty allowed
         public int[]? Sizes { get; set; }
 
         // COLOR IS STRING (IMPORTANT FIX)

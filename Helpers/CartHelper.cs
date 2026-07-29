@@ -49,6 +49,7 @@ namespace Ecommerce_Backend.Helpers
                 return (false, "ProductId is required.");
             }
 
+            // Size is optional — only validate when frontend explicitly sent a size.
             await EnsureValidSizeForVariantAsync(connection, cart);
 
             if (!cart.ColorId.HasValue && cart.VariantId.HasValue)
@@ -56,9 +57,10 @@ namespace Ecommerce_Backend.Helpers
                 cart.ColorId = await GetVariantColorIdAsync(connection, cart.VariantId.Value);
             }
 
-            if (!cart.SizeId.HasValue && cart.ProductId > 0)
+            // Do not auto-fill size when product/variant has none or user did not select one.
+            if (!cart.ColorId.HasValue && cart.ProductId > 0)
             {
-                await ApplyProductDefaultsAsync(connection, cart);
+                await ApplyProductDefaultsAsync(connection, cart, fillSize: false);
             }
 
             return (true, null);
@@ -103,29 +105,31 @@ namespace Ecommerce_Backend.Helpers
             }
 
             cart.VariantId = null;
-            await ApplyProductDefaultsAsync(connection, cart);
+            await ApplyProductDefaultsAsync(connection, cart, fillSize: false);
         }
 
         private static async Task EnsureValidSizeForVariantAsync(
             NpgsqlConnection connection,
             AddCartModel cart)
         {
-            if (!cart.VariantId.HasValue)
+            if (!cart.VariantId.HasValue || !cart.SizeId.HasValue)
                 return;
 
             var variant = await GetVariantByIdAsync(connection, cart.VariantId.Value);
             if (variant == null)
                 return;
 
-            if (!cart.SizeId.HasValue)
+            // Variant has no sizes — keep size null (nullable)
+            if (variant.Sizes.Length == 0)
             {
-                cart.SizeId = variant.DefaultSizeId;
+                cart.SizeId = null;
                 return;
             }
 
+            // Invalid size for this variant — clear instead of forcing a default
             if (!variant.Sizes.Contains(cart.SizeId.Value))
             {
-                cart.SizeId = variant.DefaultSizeId;
+                cart.SizeId = null;
             }
         }
 
@@ -234,8 +238,6 @@ namespace Ecommerce_Backend.Helpers
             public int ProductId { get; init; }
             public int? ColorId { get; init; }
             public int[] Sizes { get; init; } = Array.Empty<int>();
-            public int? DefaultSizeId =>
-                Sizes.Length > 0 ? Sizes.OrderBy(static s => s).First() : null;
         }
 
         private static void ApplyVariantToCart(
@@ -247,9 +249,13 @@ namespace Ecommerce_Backend.Helpers
             cart.VariantId = variant.Id;
             cart.ColorId ??= variant.ColorId;
 
-            if (!preserveSelectedSize || !cart.SizeId.HasValue)
+            // Size stays nullable — only keep an explicitly selected size if it belongs to this variant.
+            if (preserveSelectedSize &&
+                cart.SizeId.HasValue &&
+                variant.Sizes.Length > 0 &&
+                !variant.Sizes.Contains(cart.SizeId.Value))
             {
-                cart.SizeId ??= variant.DefaultSizeId;
+                cart.SizeId = null;
             }
         }
 
@@ -341,9 +347,10 @@ namespace Ecommerce_Backend.Helpers
 
         private static async Task ApplyProductDefaultsAsync(
             NpgsqlConnection connection,
-            AddCartModel cart)
+            AddCartModel cart,
+            bool fillSize = false)
         {
-            if (cart.ColorId.HasValue && cart.SizeId.HasValue)
+            if (cart.ColorId.HasValue && (!fillSize || cart.SizeId.HasValue))
                 return;
 
             const string query = """
@@ -367,7 +374,8 @@ namespace Ecommerce_Backend.Helpers
                     cart.ColorId = parsedColorId;
             }
 
-            if (!cart.SizeId.HasValue && reader["sizes"] != DBNull.Value)
+            // Size is nullable — only fill when explicitly requested
+            if (fillSize && !cart.SizeId.HasValue && reader["sizes"] != DBNull.Value)
             {
                 try
                 {
@@ -377,7 +385,7 @@ namespace Ecommerce_Backend.Helpers
                 }
                 catch
                 {
-                    // Legacy text[] sizes column — ignore and leave size null.
+                    // Legacy text[] sizes column — leave size null.
                 }
             }
         }

@@ -303,12 +303,12 @@ RETURNING id";
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("Slug", slug);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
-                // INTEGER[] Sizes
+                // sizes is optional / nullable
                 cmd.Parameters.AddWithValue(
                     "Sizes",
-                    variant.Sizes != null && variant.Sizes.Length > 0
+                    variant.Sizes is { Length: > 0 }
                         ? variant.Sizes
-                        : Array.Empty<int>()
+                        : (object)DBNull.Value
                 );
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);
 
@@ -456,12 +456,6 @@ RETURNING id";
                 decimal gstAmount = (basePrice * gstPercent) / 100;
                 decimal salePrice = basePrice + gstAmount;
 
-                // ================= FIX SIZES =================
-                int[] sizesArray =
-                    variant.Sizes != null && variant.Sizes.Length > 0
-                    ? variant.Sizes
-                    : Array.Empty<int>();
-
                 // ================= UPDATE QUERY =================
                 var query = @"
 UPDATE product_variants
@@ -489,7 +483,13 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("VariantName", (object?)variant.VariantName ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("SKU", (object?)variant.SKU ?? DBNull.Value);
 
-                cmd.Parameters.AddWithValue("Sizes", sizesArray);
+                // sizes is optional / nullable
+                cmd.Parameters.AddWithValue(
+                    "Sizes",
+                    variant.Sizes is { Length: > 0 }
+                        ? variant.Sizes
+                        : (object)DBNull.Value
+                );
                 cmd.Parameters.AddWithValue("Color", (object?)variant.Color ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("MRP", mrp);

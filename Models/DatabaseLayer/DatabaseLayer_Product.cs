@@ -525,10 +525,12 @@ NOW(), NOW()
                 cmd.Parameters.AddWithValue("GalleryImages",
                     galleryUrls.Count > 0 ? galleryUrls.ToArray() : Array.Empty<string>());
 
-                // ================= FIXED SIZES =================
+                // sizes is optional / nullable
                 cmd.Parameters.AddWithValue(
                     "Sizes",
-                    (object?)product.Sizes ?? Array.Empty<int>()
+                    product.Sizes is { Length: > 0 }
+                        ? product.Sizes
+                        : (object)DBNull.Value
                 );
 
                 cmd.Parameters.AddWithValue("Color", (object?)product.Color ?? DBNull.Value);
@@ -735,7 +737,9 @@ WHERE id=@id", con);
                     galleryUrls.Count > 0 ? galleryUrls.ToArray() : (object)DBNull.Value);
 
                 cmd.Parameters.AddWithValue("@sizes",
-                    product.Sizes ?? (object)DBNull.Value);
+                    product.Sizes is { Length: > 0 }
+                        ? product.Sizes
+                        : (object)DBNull.Value);
 
                 cmd.Parameters.AddWithValue("@color",
                     (object?)product.Color ?? DBNull.Value);

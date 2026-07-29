@@ -34,6 +34,10 @@ namespace Ecommerce_Backend.Helpers
                     ALTER TABLE addcart ADD COLUMN IF NOT EXISTS colorid INT NULL;
                     ALTER TABLE addcart ADD COLUMN IF NOT EXISTS sizeid INT NULL;
 
+                    ALTER TABLE products ALTER COLUMN shortdescription TYPE TEXT;
+                    ALTER TABLE products ALTER COLUMN sizes DROP NOT NULL;
+                    ALTER TABLE product_variants ALTER COLUMN sizes DROP NOT NULL;
+
                     CREATE TABLE IF NOT EXISTS product_compare (
                         id SERIAL PRIMARY KEY,
                         userid INT NULL,

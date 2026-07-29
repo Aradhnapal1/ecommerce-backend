@@ -358,16 +358,7 @@ SELECT
     c.color_name,
     c.color_code,
     c.slug AS color_slug,
-    COALESCE(
-        ac.sizeid,
-        (
-            SELECT sz.id
-            FROM sizes sz
-            WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
-            ORDER BY sz.id
-            LIMIT 1
-        )
-    ) AS resolved_sizeid,
+    ac.sizeid AS resolved_sizeid,
     s.size_name,
     s.slug AS size_slug,
     (ac.quantity * COALESCE(pv.saleprice, p.saleprice)) AS totalprice
@@ -375,16 +366,7 @@ FROM addcart ac
 INNER JOIN products p ON p.id = ac.productid
 LEFT JOIN product_variants pv ON pv.id = ac.variantid
 LEFT JOIN colors c ON c.id = COALESCE(ac.colorid, CAST(NULLIF(COALESCE(pv.color, p.color), '') AS INTEGER))
-LEFT JOIN sizes s ON s.id = COALESCE(
-    ac.sizeid,
-    (
-        SELECT sz.id
-        FROM sizes sz
-        WHERE sz.id = ANY(COALESCE(pv.sizes, p.sizes, ARRAY[]::int[]))
-        ORDER BY sz.id
-        LIMIT 1
-    )
-)
+LEFT JOIN sizes s ON s.id = ac.sizeid
 WHERE ";
 
                 if (userId.HasValue)

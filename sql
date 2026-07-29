@@ -106,7 +106,7 @@ CREATE TABLE products (
     productname VARCHAR(255) NOT NULL,
         slug VARCHAR(255) UNIQUE NOT NULL,
          type VARCHAR(100),
-    shortdescription VARCHAR(500),
+    shortdescription TEXT,
     description TEXT,
 
     sku VARCHAR(100) UNIQUE,
