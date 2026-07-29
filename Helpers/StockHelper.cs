@@ -2,15 +2,8 @@ using Npgsql;
 
 namespace Ecommerce_Backend.Helpers
 {
-    /// <summary>
-    /// Central inventory helpers: deduct stock on order, sync product stock, out-of-stock checks.
-    /// </summary>
     public static class StockHelper
     {
-        /// <summary>
-        /// Deduct quantity from variant stock (if variantId &gt; 0) or product stock.
-        /// After variant deduct, syncs products.stock = SUM(active variant stocks).
-        /// </summary>
         public static async Task DeductAsync(
             NpgsqlConnection con,
             NpgsqlTransaction? transaction,
@@ -24,54 +17,58 @@ namespace Ecommerce_Backend.Helpers
 
             if (variantId > 0)
             {
-                const string variantSql = """
-                    UPDATE product_variants
-                    SET stock = stock - @Quantity,
-                        updatedat = NOW()
-                    WHERE id = @VariantId
-                      AND productid = @ProductId
-                      AND stock >= @Quantity
+                // Single CTE: deduct variant + sync product stock in one roundtrip
+                const string sql = """
+                    WITH v AS (
+                        UPDATE product_variants
+                        SET stock = GREATEST(stock - @qty, 0),
+                            updatedat = NOW()
+                        WHERE id = @vid AND productid = @pid AND stock >= @qty
+                        RETURNING productid, stock
+                    ),
+                    sync AS (
+                        UPDATE products
+                        SET stock = COALESCE((
+                                SELECT SUM(pv.stock)::int
+                                FROM product_variants pv
+                                WHERE pv.productid = products.id AND pv.isactive = TRUE
+                            ), stock),
+                            updatedat = NOW()
+                        WHERE id IN (SELECT productid FROM v)
+                        RETURNING id
+                    )
+                    SELECT COUNT(*) FROM v
                     """;
 
-                await using var variantCmd = transaction == null
-                    ? new NpgsqlCommand(variantSql, con)
-                    : new NpgsqlCommand(variantSql, con, transaction);
-                variantCmd.Parameters.AddWithValue("@Quantity", quantity);
-                variantCmd.Parameters.AddWithValue("@VariantId", variantId);
-                variantCmd.Parameters.AddWithValue("@ProductId", productId);
+                await using var cmd = Cmd(sql, con, transaction);
+                cmd.Parameters.AddWithValue("@qty", quantity);
+                cmd.Parameters.AddWithValue("@vid", variantId);
+                cmd.Parameters.AddWithValue("@pid", productId);
 
-                if (await variantCmd.ExecuteNonQueryAsync() == 0)
-                {
+                var affected = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                if (affected == 0)
                     throw new InvalidOperationException(
                         $"Insufficient stock for {productName ?? "product"} (variant).");
-                }
 
-                await SyncProductStockFromVariantsAsync(con, transaction, productId);
                 return;
             }
 
             const string productSql = """
                 UPDATE products
-                SET stock = stock - @Quantity,
+                SET stock = GREATEST(stock - @qty, 0),
                     updatedat = NOW()
-                WHERE id = @ProductId
-                  AND stock >= @Quantity
+                WHERE id = @pid AND stock >= @qty
                 """;
 
-            await using var productCmd = transaction == null
-                ? new NpgsqlCommand(productSql, con)
-                : new NpgsqlCommand(productSql, con, transaction);
-            productCmd.Parameters.AddWithValue("@Quantity", quantity);
-            productCmd.Parameters.AddWithValue("@ProductId", productId);
+            await using var productCmd = Cmd(productSql, con, transaction);
+            productCmd.Parameters.AddWithValue("@qty", quantity);
+            productCmd.Parameters.AddWithValue("@pid", productId);
 
             if (await productCmd.ExecuteNonQueryAsync() == 0)
-            {
                 throw new InvalidOperationException(
                     $"Insufficient stock for {productName ?? "product"}.");
-            }
         }
 
-        /// <summary>Restore stock when an order is cancelled (after stock was deducted).</summary>
         public static async Task RestoreAsync(
             NpgsqlConnection con,
             NpgsqlTransaction? transaction,
@@ -79,49 +76,48 @@ namespace Ecommerce_Backend.Helpers
             int variantId,
             int quantity)
         {
-            if (quantity <= 0)
-                return;
+            if (quantity <= 0) return;
 
             if (variantId > 0)
             {
-                const string variantSql = """
-                    UPDATE product_variants
-                    SET stock = stock + @Quantity,
+                const string sql = """
+                    WITH v AS (
+                        UPDATE product_variants
+                        SET stock = stock + @qty,
+                            updatedat = NOW()
+                        WHERE id = @vid AND productid = @pid
+                        RETURNING productid
+                    )
+                    UPDATE products
+                    SET stock = COALESCE((
+                            SELECT SUM(pv.stock)::int
+                            FROM product_variants pv
+                            WHERE pv.productid = products.id AND pv.isactive = TRUE
+                        ), stock),
                         updatedat = NOW()
-                    WHERE id = @VariantId
-                      AND productid = @ProductId
+                    WHERE id IN (SELECT productid FROM v)
                     """;
 
-                await using var variantCmd = transaction == null
-                    ? new NpgsqlCommand(variantSql, con)
-                    : new NpgsqlCommand(variantSql, con, transaction);
-                variantCmd.Parameters.AddWithValue("@Quantity", quantity);
-                variantCmd.Parameters.AddWithValue("@VariantId", variantId);
-                variantCmd.Parameters.AddWithValue("@ProductId", productId);
-                await variantCmd.ExecuteNonQueryAsync();
-
-                await SyncProductStockFromVariantsAsync(con, transaction, productId);
+                await using var cmd = Cmd(sql, con, transaction);
+                cmd.Parameters.AddWithValue("@qty", quantity);
+                cmd.Parameters.AddWithValue("@vid", variantId);
+                cmd.Parameters.AddWithValue("@pid", productId);
+                await cmd.ExecuteNonQueryAsync();
                 return;
             }
 
             const string productSql = """
                 UPDATE products
-                SET stock = stock + @Quantity,
-                    updatedat = NOW()
-                WHERE id = @ProductId
+                SET stock = stock + @qty, updatedat = NOW()
+                WHERE id = @pid
                 """;
 
-            await using var productCmd = transaction == null
-                ? new NpgsqlCommand(productSql, con)
-                : new NpgsqlCommand(productSql, con, transaction);
-            productCmd.Parameters.AddWithValue("@Quantity", quantity);
-            productCmd.Parameters.AddWithValue("@ProductId", productId);
+            await using var productCmd = Cmd(productSql, con, transaction);
+            productCmd.Parameters.AddWithValue("@qty", quantity);
+            productCmd.Parameters.AddWithValue("@pid", productId);
             await productCmd.ExecuteNonQueryAsync();
         }
 
-        /// <summary>
-        /// Keep products.stock in sync with sum of active variant stocks (for listing / filters).
-        /// </summary>
         public static async Task SyncProductStockFromVariantsAsync(
             NpgsqlConnection con,
             NpgsqlTransaction? transaction,
@@ -132,21 +128,18 @@ namespace Ecommerce_Backend.Helpers
                 SET stock = COALESCE((
                         SELECT SUM(pv.stock)::int
                         FROM product_variants pv
-                        WHERE pv.productid = p.id
-                          AND pv.isactive = TRUE
+                        WHERE pv.productid = p.id AND pv.isactive = TRUE
                     ), p.stock),
                     updatedat = NOW()
-                WHERE p.id = @ProductId
+                WHERE p.id = @pid
                   AND EXISTS (
                       SELECT 1 FROM product_variants pv2
                       WHERE pv2.productid = p.id AND pv2.isactive = TRUE
                   )
                 """;
 
-            await using var cmd = transaction == null
-                ? new NpgsqlCommand(sql, con)
-                : new NpgsqlCommand(sql, con, transaction);
-            cmd.Parameters.AddWithValue("@ProductId", productId);
+            await using var cmd = Cmd(sql, con, transaction);
+            cmd.Parameters.AddWithValue("@pid", productId);
             await cmd.ExecuteNonQueryAsync();
         }
 
@@ -157,49 +150,33 @@ namespace Ecommerce_Backend.Helpers
         {
             if (variantId is > 0)
             {
-                const string q = """
-                    SELECT stock
-                    FROM product_variants
-                    WHERE id = @VariantId
-                      AND productid = @ProductId
-                      AND isactive = TRUE
-                    LIMIT 1
-                    """;
+                const string q = "SELECT COALESCE(stock, 0) FROM product_variants WHERE id = @vid AND productid = @pid AND isactive = TRUE LIMIT 1";
                 await using var cmd = new NpgsqlCommand(q, con);
-                cmd.Parameters.AddWithValue("@VariantId", variantId.Value);
-                cmd.Parameters.AddWithValue("@ProductId", productId);
-                var result = await cmd.ExecuteScalarAsync();
-                return result == null || result == DBNull.Value ? 0 : Convert.ToInt32(result);
+                cmd.Parameters.AddWithValue("@vid", variantId.Value);
+                cmd.Parameters.AddWithValue("@pid", productId);
+                var r = await cmd.ExecuteScalarAsync();
+                return r == null || r == DBNull.Value ? 0 : Convert.ToInt32(r);
             }
 
-            // Prefer sum of active variants when product has variants
-            const string productQ = """
+            const string pq = """
                 SELECT CASE
-                    WHEN EXISTS (
-                        SELECT 1 FROM product_variants pv
-                        WHERE pv.productid = p.id AND pv.isactive = TRUE
-                    )
-                    THEN COALESCE((
-                        SELECT SUM(pv.stock)::int
-                        FROM product_variants pv
-                        WHERE pv.productid = p.id AND pv.isactive = TRUE
-                    ), 0)
+                    WHEN EXISTS (SELECT 1 FROM product_variants pv WHERE pv.productid = p.id AND pv.isactive = TRUE)
+                    THEN COALESCE((SELECT SUM(pv.stock)::int FROM product_variants pv WHERE pv.productid = p.id AND pv.isactive = TRUE), 0)
                     ELSE COALESCE(p.stock, 0)
                 END
-                FROM products p
-                WHERE p.id = @ProductId
-                LIMIT 1
+                FROM products p WHERE p.id = @pid LIMIT 1
                 """;
 
-            await using var productCmd = new NpgsqlCommand(productQ, con);
-            productCmd.Parameters.AddWithValue("@ProductId", productId);
-            var stock = await productCmd.ExecuteScalarAsync();
-            return stock == null || stock == DBNull.Value ? 0 : Convert.ToInt32(stock);
+            await using var pc = new NpgsqlCommand(pq, con);
+            pc.Parameters.AddWithValue("@pid", productId);
+            var s = await pc.ExecuteScalarAsync();
+            return s == null || s == DBNull.Value ? 0 : Convert.ToInt32(s);
         }
 
         public static bool IsOutOfStock(int stock) => stock <= 0;
+        public static string StockStatus(int stock) => stock <= 0 ? "Out of Stock" : "In Stock";
 
-        public static string StockStatus(int stock) =>
-            stock <= 0 ? "Out of Stock" : "In Stock";
+        private static NpgsqlCommand Cmd(string sql, NpgsqlConnection con, NpgsqlTransaction? tx) =>
+            tx == null ? new NpgsqlCommand(sql, con) : new NpgsqlCommand(sql, con, tx);
     }
 }

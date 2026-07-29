@@ -42,22 +42,24 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         addressCmd.Parameters.AddWithValue("@UserId", userId);
                         addressCmd.Transaction = transaction;
 
-                        using var addressReader = await addressCmd.ExecuteReaderAsync();
-                        if (await addressReader.ReadAsync())
+                        using (var addressReader = await addressCmd.ExecuteReaderAsync())
                         {
-                            address = new UserAddressModel
+                            if (await addressReader.ReadAsync())
                             {
-                                Id = (int)addressReader["id"],
-                                FullName = (string)addressReader["full_name"],
-                                Mobile = (string)addressReader["mobile"],
-                                AddressLine1 = (string)addressReader["address_line1"],
-                                AddressLine2 = addressReader["address_line2"] != DBNull.Value ? (string)addressReader["address_line2"] : null,
-                                Landmark = addressReader["landmark"] != DBNull.Value ? (string)addressReader["landmark"] : null,
-                                City = addressReader["city"] != DBNull.Value ? (string)addressReader["city"] : null,
-                                State = addressReader["state"] != DBNull.Value ? (string)addressReader["state"] : null,
-                                Country = addressReader["country"] != DBNull.Value ? (string)addressReader["country"] : null,
-                                Pincode = addressReader["pincode"] != DBNull.Value ? (string)addressReader["pincode"] : null
-                            };
+                                address = new UserAddressModel
+                                {
+                                    Id = (int)addressReader["id"],
+                                    FullName = (string)addressReader["full_name"],
+                                    Mobile = (string)addressReader["mobile"],
+                                    AddressLine1 = (string)addressReader["address_line1"],
+                                    AddressLine2 = addressReader["address_line2"] != DBNull.Value ? (string)addressReader["address_line2"] : null,
+                                    Landmark = addressReader["landmark"] != DBNull.Value ? (string)addressReader["landmark"] : null,
+                                    City = addressReader["city"] != DBNull.Value ? (string)addressReader["city"] : null,
+                                    State = addressReader["state"] != DBNull.Value ? (string)addressReader["state"] : null,
+                                    Country = addressReader["country"] != DBNull.Value ? (string)addressReader["country"] : null,
+                                    Pincode = addressReader["pincode"] != DBNull.Value ? (string)addressReader["pincode"] : null
+                                };
+                            }
                         }
                     }
 
@@ -98,7 +100,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         cartCmd.Parameters.AddWithValue("@UserId", userId);
                         cartCmd.Transaction = transaction;
 
-                        using var cartReader = await cartCmd.ExecuteReaderAsync();
+                        using (var cartReader = await cartCmd.ExecuteReaderAsync())
                         while (await cartReader.ReadAsync())
                         {
                             var quantity = (int)cartReader["quantity"];
@@ -172,15 +174,17 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                             couponCmd.Parameters.AddWithValue("@CouponCode", model.CouponCode.Trim());
                             couponCmd.Transaction = transaction;
 
-                            using var couponReader = await couponCmd.ExecuteReaderAsync();
-                            if (await couponReader.ReadAsync())
+                            using (var couponReader = await couponCmd.ExecuteReaderAsync())
                             {
-                                couponId = (int)couponReader["id"];
-                                couponType = couponReader["coupon_type"].ToString()!;
-                                couponValue = Convert.ToDecimal(couponReader["coupon_value"]);
-                                minOrderAmount = Convert.ToDecimal(couponReader["min_order_amount"]);
-                                usageLimit = Convert.ToInt32(couponReader["usage_limit"]);
-                                couponFound = true;
+                                if (await couponReader.ReadAsync())
+                                {
+                                    couponId = (int)couponReader["id"];
+                                    couponType = couponReader["coupon_type"].ToString()!;
+                                    couponValue = Convert.ToDecimal(couponReader["coupon_value"]);
+                                    minOrderAmount = Convert.ToDecimal(couponReader["min_order_amount"]);
+                                    usageLimit = Convert.ToInt32(couponReader["usage_limit"]);
+                                    couponFound = true;
+                                }
                             }
                         }
 
