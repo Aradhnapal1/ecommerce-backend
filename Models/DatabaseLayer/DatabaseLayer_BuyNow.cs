@@ -560,19 +560,13 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
         private static async Task DeductStockAsync(
             NpgsqlConnection con, NpgsqlTransaction transaction, OrderLineItem item)
         {
-            string query = item.VariantId > 0
-                ? "UPDATE product_variants SET stock = stock - @Quantity WHERE id = @VariantId AND stock >= @Quantity"
-                : "UPDATE products SET stock = stock - @Quantity WHERE id = @ProductId AND stock >= @Quantity";
-
-            await using var cmd = new NpgsqlCommand(query, con, transaction);
-            cmd.Parameters.AddWithValue("@Quantity", item.Quantity);
-            if (item.VariantId > 0)
-                cmd.Parameters.AddWithValue("@VariantId", item.VariantId);
-            else
-                cmd.Parameters.AddWithValue("@ProductId", item.ProductId);
-
-            if (await cmd.ExecuteNonQueryAsync() == 0)
-                throw new InvalidOperationException($"Insufficient stock for {item.ProductName}");
+            await StockHelper.DeductAsync(
+                con,
+                transaction,
+                item.ProductId,
+                item.VariantId,
+                item.Quantity,
+                item.ProductName);
         }
 
         private static async Task InsertCouponUsageAsync(

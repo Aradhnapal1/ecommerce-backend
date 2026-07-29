@@ -57,6 +57,22 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     });
                 }
 
+                var availableStock = await StockHelper.GetAvailableStockAsync(
+                    con,
+                    cart.ProductId,
+                    cart.VariantId);
+
+                if (availableStock <= 0)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = "Product is out of stock",
+                        stock = 0,
+                        isOutOfStock = true
+                    });
+                }
+
                 // ====================================
                 // Existing Cart Check
                 // ====================================
@@ -171,6 +187,19 @@ LIMIT 1";
 
                     await reader.CloseAsync();
 
+                    var newQty = oldQty + cart.Quantity;
+                    if (newQty > availableStock)
+                    {
+                        return new BadRequestObjectResult(new
+                        {
+                            success = false,
+                            message = $"Only {availableStock} item(s) available in stock",
+                            stock = availableStock,
+                            cartQuantity = oldQty,
+                            isOutOfStock = availableStock <= 0
+                        });
+                    }
+
                     string updateQuery = @"
 UPDATE addcart
 SET
@@ -186,7 +215,7 @@ WHERE id = @id";
 
                     updateCmd.Parameters.AddWithValue(
                         "@qty",
-                        oldQty + cart.Quantity
+                        newQty
                     );
 
                     updateCmd.Parameters.AddWithValue(
@@ -203,15 +232,27 @@ WHERE id = @id";
                             success = true,
                             message = "Cart quantity updated",
                             cartId,
-                            quantity = oldQty + cart.Quantity,
+                            quantity = newQty,
                             productId = cart.ProductId,
                             variantId = cart.VariantId,
                             colorId = cart.ColorId,
-                            sizeId = cart.SizeId
+                            sizeId = cart.SizeId,
+                            stock = availableStock
                         });
                 }
 
                 await reader.CloseAsync();
+
+                if (cart.Quantity > availableStock)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = $"Only {availableStock} item(s) available in stock",
+                        stock = availableStock,
+                        isOutOfStock = false
+                    });
+                }
 
                 // ====================================
                 // Insert New Cart Row

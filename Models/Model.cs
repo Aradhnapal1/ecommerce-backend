@@ -188,6 +188,15 @@ namespace Ecommerce_Backend.Models
 
         public int Stock { get; set; }
 
+        /// <summary>True when Stock &gt; 0.</summary>
+        public bool IsInStock => Stock > 0;
+
+        /// <summary>True when Stock &lt;= 0.</summary>
+        public bool IsOutOfStock => Stock <= 0;
+
+        /// <summary>"In Stock" or "Out of Stock".</summary>
+        public string StockStatus => Stock > 0 ? "In Stock" : "Out of Stock";
+
         public string? ProductImageUrl { get; set; }
 
         // PostgreSQL TEXT[]
@@ -394,6 +403,10 @@ namespace Ecommerce_Backend.Models
         public decimal? SalePrice { get; set; }
 
         public int Stock { get; set; }
+
+        public bool IsInStock => Stock > 0;
+        public bool IsOutOfStock => Stock <= 0;
+        public string StockStatus => Stock > 0 ? "In Stock" : "Out of Stock";
 
         public string? VariantImageUrl { get; set; }
 

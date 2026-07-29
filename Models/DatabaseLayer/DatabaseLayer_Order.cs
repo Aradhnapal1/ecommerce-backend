@@ -314,38 +314,23 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
 
                         if (!isOnline)
                         {
-                            string deductStockQuery;
-                            if (item.VariantId > 0)
+                            try
                             {
-                                deductStockQuery = @"
-                                UPDATE product_variants 
-                                SET stock = stock - @Quantity 
-                                WHERE id = @VariantId AND stock >= @Quantity";
+                                await StockHelper.DeductAsync(
+                                    con,
+                                    transaction,
+                                    item.ProductId,
+                                    item.VariantId,
+                                    item.Quantity,
+                                    item.ProductName);
                             }
-                            else
-                            {
-                                deductStockQuery = @"
-                                UPDATE products 
-                                SET stock = stock - @Quantity 
-                                WHERE id = @ProductId AND stock >= @Quantity";
-                            }
-
-                            using var deductCmd = new NpgsqlCommand(deductStockQuery, con);
-                            deductCmd.Parameters.AddWithValue("@Quantity", item.Quantity);
-                            if (item.VariantId > 0)
-                                deductCmd.Parameters.AddWithValue("@VariantId", item.VariantId);
-                            else
-                                deductCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
-                            deductCmd.Transaction = transaction;
-
-                            var rowsAffected = await deductCmd.ExecuteNonQueryAsync();
-                            if (rowsAffected == 0)
+                            catch (InvalidOperationException ex)
                             {
                                 await transaction.RollbackAsync();
                                 return new BadRequestObjectResult(new
                                 {
                                     success = false,
-                                    message = $"Insufficient stock for {item.ProductName}"
+                                    message = ex.Message
                                 });
                             }
                         }
@@ -622,7 +607,7 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 await con.OpenAsync();
 
                 var checkQuery = @"
-                    SELECT o.order_status, o.order_number, u.email 
+                    SELECT o.order_status, o.payment_status, o.payment_method, o.order_number, u.email 
                     FROM orders o
                     JOIN user_register u ON o.userid = u.id
                     WHERE o.id = @OrderId AND o.userid = @UserId LIMIT 1";
@@ -632,12 +617,16 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                 checkCmd.Parameters.AddWithValue("@UserId", userId);
 
                 string? status = null;
+                string? paymentStatus = null;
+                string? paymentMethod = null;
                 string? orderNumber = null;
                 string? userEmail = null;
                 using (var reader = await checkCmd.ExecuteReaderAsync())
                 {
                     if (await reader.ReadAsync()) {
                         status = reader["order_status"]?.ToString();
+                        paymentStatus = reader["payment_status"]?.ToString();
+                        paymentMethod = reader["payment_method"]?.ToString();
                         orderNumber = reader["order_number"]?.ToString();
                         userEmail = reader["email"]?.ToString();
                     }
@@ -655,12 +644,56 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     return new BadRequestObjectResult(new { success = false, message = "Order cannot be cancelled at this stage" });
                 }
 
-                var updateQuery = "UPDATE orders SET order_status = 'CANCELLED', updatedat = NOW() WHERE id = @OrderId AND userid = @UserId";
-                using var updateCmd = new NpgsqlCommand(updateQuery, con);
-                updateCmd.Parameters.AddWithValue("@OrderId", orderId);
-                updateCmd.Parameters.AddWithValue("@UserId", userId);
+                await using var transaction = await con.BeginTransactionAsync();
+                try
+                {
+                    var updateQuery = "UPDATE orders SET order_status = 'CANCELLED', updatedat = NOW() WHERE id = @OrderId AND userid = @UserId";
+                    await using (var updateCmd = new NpgsqlCommand(updateQuery, con, transaction))
+                    {
+                        updateCmd.Parameters.AddWithValue("@OrderId", orderId);
+                        updateCmd.Parameters.AddWithValue("@UserId", userId);
+                        await updateCmd.ExecuteNonQueryAsync();
+                    }
 
-                await updateCmd.ExecuteNonQueryAsync();
+                    // Restore stock only if it was already deducted (COD / paid online).
+                    bool stockWasDeducted =
+                        string.Equals(paymentStatus, "SUCCESS", StringComparison.OrdinalIgnoreCase) ||
+                        !PaymentHelper.IsOnlinePayment(paymentMethod);
+
+                    if (stockWasDeducted)
+                    {
+                        const string itemsQuery = """
+                            SELECT productid, variantid, quantity
+                            FROM order_items
+                            WHERE orderid = @OrderId
+                            """;
+                        await using var itemsCmd = new NpgsqlCommand(itemsQuery, con, transaction);
+                        itemsCmd.Parameters.AddWithValue("@OrderId", orderId);
+                        await using var itemsReader = await itemsCmd.ExecuteReaderAsync();
+                        var restoreItems = new List<(int ProductId, int VariantId, int Quantity)>();
+                        while (await itemsReader.ReadAsync())
+                        {
+                            restoreItems.Add((
+                                Convert.ToInt32(itemsReader["productid"]),
+                                itemsReader["variantid"] == DBNull.Value ? 0 : Convert.ToInt32(itemsReader["variantid"]),
+                                Convert.ToInt32(itemsReader["quantity"])));
+                        }
+                        await itemsReader.CloseAsync();
+
+                        foreach (var item in restoreItems)
+                        {
+                            await StockHelper.RestoreAsync(
+                                con, transaction, item.ProductId, item.VariantId, item.Quantity);
+                        }
+                    }
+
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
 
                 // Send cancellation email to user
                 try

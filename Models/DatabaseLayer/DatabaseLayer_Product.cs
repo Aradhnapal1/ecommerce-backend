@@ -24,7 +24,39 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
     public partial class DataBaseLayer : IDatabaseLayer
     {
         private const string ProductSelectColumns = @"
-    p.*,
+    p.id,
+    p.productname,
+    p.slug,
+    p.type,
+    p.shortdescription,
+    p.description,
+    p.sku,
+    p.brandid,
+    p.categoryid,
+    p.baseprice,
+    p.mrp,
+    p.discountprice,
+    p.saleprice,
+    p.gst,
+    CASE
+        WHEN EXISTS (
+            SELECT 1 FROM product_variants pv0
+            WHERE pv0.productid = p.id AND pv0.isactive = TRUE
+        )
+        THEN COALESCE((
+            SELECT SUM(pv1.stock)::int
+            FROM product_variants pv1
+            WHERE pv1.productid = p.id AND pv1.isactive = TRUE
+        ), 0)
+        ELSE COALESCE(p.stock, 0)
+    END AS stock,
+    p.productimageurl,
+    p.galleryimages,
+    p.sizes,
+    p.color,
+    p.isactive,
+    p.createdat,
+    p.updatedat,
     b.brand_name,
     b.slug AS brand_slug,
     c.category_name,
@@ -203,7 +235,39 @@ EXISTS (
 
             if (filter.InStock == true)
             {
-                whereClauses.Add("p.stock > 0");
+                whereClauses.Add(@"
+(
+    CASE
+        WHEN EXISTS (
+            SELECT 1 FROM product_variants pv_s
+            WHERE pv_s.productid = p.id AND pv_s.isactive = TRUE
+        )
+        THEN COALESCE((
+            SELECT SUM(pv_s2.stock)
+            FROM product_variants pv_s2
+            WHERE pv_s2.productid = p.id AND pv_s2.isactive = TRUE
+        ), 0)
+        ELSE COALESCE(p.stock, 0)
+    END
+) > 0");
+            }
+            else if (filter.InStock == false)
+            {
+                whereClauses.Add(@"
+(
+    CASE
+        WHEN EXISTS (
+            SELECT 1 FROM product_variants pv_s
+            WHERE pv_s.productid = p.id AND pv_s.isactive = TRUE
+        )
+        THEN COALESCE((
+            SELECT SUM(pv_s2.stock)
+            FROM product_variants pv_s2
+            WHERE pv_s2.productid = p.id AND pv_s2.isactive = TRUE
+        ), 0)
+        ELSE COALESCE(p.stock, 0)
+    END
+) <= 0");
             }
 
             if (!string.IsNullOrWhiteSpace(filter.ResolvedSearch))

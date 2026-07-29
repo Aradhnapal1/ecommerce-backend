@@ -1,5 +1,6 @@
 ﻿using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using Ecommerce_Backend.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using System.Text.RegularExpressions;
@@ -328,6 +329,7 @@ RETURNING id";
                 cmd.Parameters.AddWithValue("IsActive", variant.IsActive);
 
                 var id = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                await StockHelper.SyncProductStockFromVariantsAsync(con, null, variant.ProductId);
 
                 return new
                 {
@@ -507,6 +509,11 @@ WHERE id = @Id";
                 cmd.Parameters.AddWithValue("IsActive", variant.IsActive);
 
                 var rows = await cmd.ExecuteNonQueryAsync();
+
+                if (rows > 0)
+                {
+                    await StockHelper.SyncProductStockFromVariantsAsync(con, null, variant.ProductId);
+                }
 
                 return new
                 {
