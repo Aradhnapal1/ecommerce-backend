@@ -164,6 +164,35 @@ namespace Ecommerce_Backend.Controllers
             return Ok(result);
         }
 
-       
+        /// <summary>Download CSV sample template for product import.</summary>
+        [HttpGet("import/sample")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> DownloadImportSample()
+        {
+            var (content, fileName, contentType) = await _businessLayer.GetProductImportSample();
+            return File(content, contentType, fileName);
+        }
+
+        /// <summary>Export all products to CSV (names + image URLs).</summary>
+        [HttpGet("export")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        public async Task<IActionResult> ExportProducts()
+        {
+            var (content, fileName, contentType) = await _businessLayer.ExportProductsCsv();
+            return File(content, contentType, fileName);
+        }
+
+        /// <summary>
+        /// Import products from CSV.
+        /// Missing brand/category/color/size are auto-created.
+        /// ProductImageUrl / GalleryImageUrls are downloaded and uploaded to Cloudinary.
+        /// </summary>
+        [HttpPost("import")]
+        [Authorize(Roles = AuthRoles.Admin)]
+        [RequestSizeLimit(50_000_000)]
+        public async Task<IActionResult> ImportProducts(IFormFile file)
+        {
+            return await _businessLayer.ImportProductsCsv(file);
+        }
     }
 }

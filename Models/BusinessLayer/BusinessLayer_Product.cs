@@ -19,6 +19,9 @@ namespace Ecommerce_Backend.Models.BusinessLayer
         Task<IActionResult> GetProductsByBrandSlug(string brandSlug, ProductFilterRequest? filter);
         Task<IActionResult> GetProductVariants(int productId);
         Task<IActionResult> GetTopDiscountedProducts();
+        Task<(byte[] Content, string FileName, string ContentType)> GetProductImportSample();
+        Task<(byte[] Content, string FileName, string ContentType)> ExportProductsCsv();
+        Task<IActionResult> ImportProductsCsv(IFormFile file);
 
     }
 
@@ -205,6 +208,21 @@ namespace Ecommerce_Backend.Models.BusinessLayer
                 count = variants.Count,
                 data = variants
             });
+        }
+
+        public async Task<(byte[] Content, string FileName, string ContentType)> GetProductImportSample()
+        {
+            return await _databaseLayer.GetProductImportSample();
+        }
+
+        public async Task<(byte[] Content, string FileName, string ContentType)> ExportProductsCsv()
+        {
+            return await _databaseLayer.ExportProductsCsv();
+        }
+
+        public async Task<IActionResult> ImportProductsCsv(IFormFile file)
+        {
+            return await _databaseLayer.ImportProductsCsv(file);
         }
     }
 }
