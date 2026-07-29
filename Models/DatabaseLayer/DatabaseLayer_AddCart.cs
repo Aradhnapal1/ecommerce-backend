@@ -363,9 +363,7 @@ RETURNING id";
                     new
                     {
                         success = false,
-                        message = ex.Message,
-                        innerException =
-                            ex.InnerException?.Message
+                        message = "Something went wrong while adding to cart"
                     })
                 {
                     StatusCode = 500
@@ -507,7 +505,7 @@ WHERE ";
                 return new ObjectResult(new
                 {
                     success = false,
-                    message = ex.Message
+                    message = "Something went wrong while fetching cart"
                 })
                 {
                     StatusCode = 500
@@ -515,183 +513,118 @@ WHERE ";
             }
         }
 
-        // Implementation
         public async Task<IActionResult> UpdateCartQuantity(
             UpdateCartQuantityModel model)
         {
             try
             {
-                using var con =
-                    new NpgsqlConnection(DbConnection);
-
+                using var con = new NpgsqlConnection(DbConnection);
                 await con.OpenAsync();
 
-                // ====================================
-                // Ownership + Current Quantity Fetch
-                // ====================================
+                int currentQty = 0;
+                int productId = 0;
+                int variantId = 0;
+                bool found = false;
 
-                string ownerCheckQuery;
-
+                string fetchQuery;
                 if (model.UserId.HasValue)
                 {
-                    ownerCheckQuery = @"
-SELECT quantity
-FROM addcart
-WHERE
-    id      = @cartid
-    AND userid = @userid
-LIMIT 1";
+                    fetchQuery = @"SELECT quantity, productid, COALESCE(variantid, 0) AS variantid
+                        FROM addcart WHERE id = @cartid AND userid = @userid LIMIT 1";
                 }
                 else
                 {
-                    ownerCheckQuery = @"
-SELECT quantity
-FROM addcart
-WHERE
-    id        = @cartid
-    AND ipaddress = @ipaddress
-LIMIT 1";
+                    fetchQuery = @"SELECT quantity, productid, COALESCE(variantid, 0) AS variantid
+                        FROM addcart WHERE id = @cartid AND ipaddress = @ipaddress LIMIT 1";
                 }
 
-                using var ownerCmd =
-                    new NpgsqlCommand(
-                        ownerCheckQuery,
-                        con
-                    );
-
-                ownerCmd.Parameters.AddWithValue(
-                    "@cartid",
-                    model.CartId
-                );
-
-                if (model.UserId.HasValue)
+                using (var fetchCmd = new NpgsqlCommand(fetchQuery, con))
                 {
-                    ownerCmd.Parameters.AddWithValue(
-                        "@userid",
-                        model.UserId.Value
-                    );
-                }
-                else
-                {
-                    ownerCmd.Parameters.AddWithValue(
-                        "@ipaddress",
-                        model.IpAddress ?? ""
-                    );
-                }
+                    fetchCmd.Parameters.AddWithValue("@cartid", model.CartId);
+                    if (model.UserId.HasValue)
+                        fetchCmd.Parameters.AddWithValue("@userid", model.UserId.Value);
+                    else
+                        fetchCmd.Parameters.AddWithValue("@ipaddress", model.IpAddress ?? "");
 
-                var currentQtyObj =
-                    await ownerCmd
-                    .ExecuteScalarAsync();
-
-                // ====================================
-                // Cart row mila hi nahi
-                // ====================================
-
-                if (currentQtyObj == null)
-                {
-                    return new NotFoundObjectResult(
-                        new
+                    using (var reader = await fetchCmd.ExecuteReaderAsync())
+                    {
+                        if (await reader.ReadAsync())
                         {
-                            success = false,
-                            message =
-                                "Cart item not found " +
-                                "or access denied"
-                        });
+                            currentQty = Convert.ToInt32(reader["quantity"]);
+                            productId = Convert.ToInt32(reader["productid"]);
+                            variantId = Convert.ToInt32(reader["variantid"]);
+                            found = true;
+                        }
+                    }
                 }
 
-                // ====================================
-                // Final Quantity Calculate karo
-                // ====================================
+                if (!found)
+                {
+                    return new NotFoundObjectResult(new
+                    {
+                        success = false,
+                        message = "Cart item not found or access denied"
+                    });
+                }
 
-                int currentQty =
-                    Convert.ToInt32(currentQtyObj);
-
-                int finalQty =
-                    currentQty + model.Quantity;
-
-                // ====================================
-                // Final Quantity 0 ya kam → DELETE
-                // ====================================
+                int finalQty = currentQty + model.Quantity;
 
                 if (finalQty <= 0)
                 {
-                    string deleteQuery = @"
-DELETE FROM addcart
-WHERE id = @cartid";
+                    using (var deleteCmd = new NpgsqlCommand("DELETE FROM addcart WHERE id = @cartid", con))
+                    {
+                        deleteCmd.Parameters.AddWithValue("@cartid", model.CartId);
+                        await deleteCmd.ExecuteNonQueryAsync();
+                    }
 
-                    using var deleteCmd =
-                        new NpgsqlCommand(
-                            deleteQuery,
-                            con
-                        );
-
-                    deleteCmd.Parameters.AddWithValue(
-                        "@cartid",
-                        model.CartId
-                    );
-
-                    await deleteCmd
-                        .ExecuteNonQueryAsync();
-
-                    return new OkObjectResult(
-                        new
-                        {
-                            success = true,
-                            message = "Item removed from cart",
-                            cartId = model.CartId,
-                            quantity = 0
-                        });
-                }
-
-                // ====================================
-                // Quantity UPDATE karo
-                // ====================================
-
-                string updateQuery = @"
-UPDATE addcart
-SET
-    quantity  = @finalqty,
-    updatedat = NOW()
-WHERE id = @cartid";
-
-                using var updateCmd =
-                    new NpgsqlCommand(
-                        updateQuery,
-                        con
-                    );
-
-                updateCmd.Parameters.AddWithValue(
-                    "@finalqty",
-                    finalQty
-                );
-
-                updateCmd.Parameters.AddWithValue(
-                    "@cartid",
-                    model.CartId
-                );
-
-                await updateCmd
-                    .ExecuteNonQueryAsync();
-
-                return new OkObjectResult(
-                    new
+                    return new OkObjectResult(new
                     {
                         success = true,
-                        message = "Cart quantity updated",
+                        message = "Item removed from cart",
                         cartId = model.CartId,
-                        quantity = finalQty  // ← sahi final value
+                        quantity = 0
                     });
+                }
+
+                var availableStock = await StockHelper.GetAvailableStockAsync(
+                    con, productId, variantId > 0 ? variantId : null);
+
+                if (finalQty > availableStock)
+                {
+                    return new BadRequestObjectResult(new
+                    {
+                        success = false,
+                        message = $"Only {availableStock} item(s) available in stock",
+                        stock = availableStock,
+                        currentQuantity = currentQty,
+                        isOutOfStock = availableStock <= 0
+                    });
+                }
+
+                using (var updateCmd = new NpgsqlCommand(
+                    "UPDATE addcart SET quantity = @finalqty, updatedat = NOW() WHERE id = @cartid", con))
+                {
+                    updateCmd.Parameters.AddWithValue("@finalqty", finalQty);
+                    updateCmd.Parameters.AddWithValue("@cartid", model.CartId);
+                    await updateCmd.ExecuteNonQueryAsync();
+                }
+
+                return new OkObjectResult(new
+                {
+                    success = true,
+                    message = "Cart quantity updated",
+                    cartId = model.CartId,
+                    quantity = finalQty,
+                    stock = availableStock
+                });
             }
             catch (Exception ex)
             {
-                return new ObjectResult(
-                    new
-                    {
-                        success = false,
-                        message = ex.Message,
-                        innerException =
-                            ex.InnerException?.Message
-                    })
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = "Something went wrong while updating cart"
+                })
                 {
                     StatusCode = 500
                 };
@@ -744,14 +677,11 @@ WHERE id = @cartid";
             }
             catch (Exception ex)
             {
-                return new ObjectResult(
-                    new
-                    {
-                        success = false,
-                        message = ex.Message,
-                        innerException =
-                            ex.InnerException?.Message
-                    })
+                return new ObjectResult(new
+                {
+                    success = false,
+                    message = "Something went wrong while deleting cart item"
+                })
                 {
                     StatusCode = 500
                 };
@@ -805,16 +735,13 @@ WHERE id = @cartid";
                 return new ObjectResult(new
                 {
                     success = false,
-                    message = ex.Message,
-                    innerException = ex.InnerException?.Message
+                    message = "Something went wrong while clearing cart"
                 })
                 {
                     StatusCode = 500
                 };
             }
         }
-
-
 
         public async Task MergeGuestCartToUser(int userId, string ipAddress)
         {

@@ -101,40 +101,43 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                         cartCmd.Transaction = transaction;
 
                         using (var cartReader = await cartCmd.ExecuteReaderAsync())
-                        while (await cartReader.ReadAsync())
                         {
-                            var quantity = (int)cartReader["quantity"];
-                            var price = (decimal)cartReader["saleprice"];
-                            var availableStock = Convert.ToInt32(cartReader["available_stock"]);
-                            var itemTotal = quantity * price;
-
-                            if (quantity > availableStock)
+                            while (await cartReader.ReadAsync())
                             {
-                                await transaction.RollbackAsync();
-                                return new BadRequestObjectResult(new
+                                var quantity = (int)cartReader["quantity"];
+                                var price = (decimal)cartReader["saleprice"];
+                                var availableStock = Convert.ToInt32(cartReader["available_stock"]);
+                                var itemTotal = quantity * price;
+
+                                if (quantity > availableStock)
                                 {
-                                    success = false,
-                                    message = $"Insufficient stock for {cartReader["productname"]}. Available: {availableStock}"
+                                    cartReader.Close();
+                                    await transaction.RollbackAsync();
+                                    return new BadRequestObjectResult(new
+                                    {
+                                        success = false,
+                                        message = $"Insufficient stock for product. Available: {availableStock}"
+                                    });
+                                }
+
+                                cartItems.Add(new CartItemModel
+                                {
+                                    Id = (int)cartReader["id"],
+                                    UserId = (int)cartReader["userid"],
+                                    ProductId = (int)cartReader["productid"],
+                                    VariantId = cartReader["variantid"] != DBNull.Value ? (int)cartReader["variantid"] : 0,
+                                    Quantity = quantity,
+                                    Price = price,
+                                    MRP = cartReader["mrp"] != DBNull.Value ? Convert.ToDecimal(cartReader["mrp"]) : 0,
+                                    ProductName = cartReader["productname"]?.ToString(),
+                                    ProductImageUrl = cartReader["imageurl"]?.ToString(),
+                                    SKU = cartReader["sku"]?.ToString(),
+                                    ColorName = cartReader["color_name"]?.ToString(),
+                                    SizeName = cartReader["size_name"]?.ToString()
                                 });
+
+                                subtotal += itemTotal;
                             }
-
-                            cartItems.Add(new CartItemModel
-                            {
-                                Id = (int)cartReader["id"],
-                                UserId = (int)cartReader["userid"],
-                                ProductId = (int)cartReader["productid"],
-                                VariantId = cartReader["variantid"] != DBNull.Value ? (int)cartReader["variantid"] : 0,
-                                Quantity = quantity,
-                                Price = price,
-                                MRP = cartReader["mrp"] != DBNull.Value ? Convert.ToDecimal(cartReader["mrp"]) : 0,
-                                ProductName = cartReader["productname"]?.ToString(),
-                                ProductImageUrl = cartReader["imageurl"]?.ToString(),
-                                SKU = cartReader["sku"]?.ToString(),
-                                ColorName = cartReader["color_name"]?.ToString(),
-                                SizeName = cartReader["size_name"]?.ToString()
-                            });
-
-                            subtotal += itemTotal;
                         }
                     }
 
@@ -404,12 +407,12 @@ namespace Ecommerce_Backend.Models.DatabaseLayer
                     throw;
                 }       
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ObjectResult(new
                 {
                     success = false,
-                    message = ex.Message
+                    message = "Something went wrong while creating order"
                 })
                 {
                     StatusCode = 500
